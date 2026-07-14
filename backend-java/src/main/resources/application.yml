@@ -1,8 +1,6 @@
 spring:
   application:
     name: lifeagent-java
-  profiles:
-    default: all-in-one
   datasource:
     url: ${DATABASE_URL:jdbc:postgresql://localhost:5432/lifeagent}
     username: ${DATABASE_USERNAME:lifeagent}
@@ -10,6 +8,15 @@ spring:
     hikari:
       connection-timeout: 3000
       validation-timeout: 1000
+  jackson:
+    deserialization:
+      fail-on-unknown-properties: true
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      timeout: 2000
+      connect-timeout: 2000
   flyway:
     enabled: true
     locations: classpath:db/migration
@@ -43,8 +50,8 @@ management:
           include: readinessState,db
 
 lifeagent:
-  worker:
-    heartbeat-interval: ${WORKER_HEARTBEAT_INTERVAL:30000}
+  mock-channel:
+    enabled: ${MOCK_CHANNEL_ENABLED:false}
 
 logging:
   pattern:

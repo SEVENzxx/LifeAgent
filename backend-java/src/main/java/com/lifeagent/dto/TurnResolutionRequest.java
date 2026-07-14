@@ -23,8 +23,8 @@ public class TurnResolutionRequest {
      */
     @Schema(description = "本次跨服务调用的唯一请求 ID", maxLength = Constants.MAX_IDENTIFIER_LENGTH)
     @JsonProperty("request_id")
-    @NotBlank(message = Constants.REQUEST_ID_REQUIRED_MESSAGE)
-    @Size(max = Constants.MAX_IDENTIFIER_LENGTH, message = Constants.IDENTIFIER_TOO_LONG_MESSAGE)
+    @NotBlank(message = "请求 ID 不能为空")
+    @Size(max = Constants.MAX_IDENTIFIER_LENGTH, message = "标识不能超过 " + Constants.MAX_IDENTIFIER_LENGTH + " 个字符")
     private String requestId;
 
     /**
@@ -32,15 +32,15 @@ public class TurnResolutionRequest {
      */
     @Schema(description = "Java 与 Python 共同维护的协议版本", pattern = Constants.SCHEMA_VERSION_PATTERN)
     @JsonProperty("schema_version")
-    @NotBlank(message = Constants.SCHEMA_VERSION_REQUIRED_MESSAGE)
-    @Pattern(regexp = Constants.SCHEMA_VERSION_PATTERN, message = Constants.SCHEMA_VERSION_INVALID_MESSAGE)
+    @NotBlank(message = "协议版本不能为空")
+    @Pattern(regexp = Constants.SCHEMA_VERSION_PATTERN, message = "协议版本只能包含数字")
     private String schemaVersion;
 
     /**
      * 经过 Java 侧裁剪后的模型上下文
      */
     @Schema(description = "经过 Java 侧裁剪后的模型上下文")
-    @NotNull(message = Constants.CONTEXT_REQUIRED_MESSAGE)
+    @NotNull(message = "上下文不能为空")
     @Valid
     private ContextPackage context;
 }

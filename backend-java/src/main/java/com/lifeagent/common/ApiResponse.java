@@ -37,7 +37,7 @@ public class ApiResponse<T> {
      * @return 成功响应
      */
     public static <T> ApiResponse<T> ok(T data) {
-        return new ApiResponse<>(true, Constants.SUCCESS_MESSAGE, data);
+        return new ApiResponse<>(true, "ok", data);
     }
 
     /**

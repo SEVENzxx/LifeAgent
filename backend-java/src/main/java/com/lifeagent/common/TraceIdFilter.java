@@ -49,7 +49,7 @@ public class TraceIdFilter extends OncePerRequestFilter {
             filterChain.doFilter(request, response);
         } finally {
             if (logRequest) {
-                long durationMillis = (System.nanoTime() - startedAt) / Constants.NANOSECONDS_PER_MILLISECOND;
+                long durationMillis = (System.nanoTime() - startedAt) / 1_000_000L;
                 log.info("请求处理完成, method={}, path={}, status={}, durationMs={}",
                         request.getMethod(), request.getRequestURI(), response.getStatus(), durationMillis);
             }
@@ -62,7 +62,7 @@ public class TraceIdFilter extends OncePerRequestFilter {
         if (candidate != null && SAFE_TRACE_ID.matcher(candidate).matches()) {
             return candidate;
         }
-        return UUID.randomUUID().toString().replace(Constants.UUID_SEPARATOR, Constants.EMPTY_STRING);
+        return UUID.randomUUID().toString().replace("-", "");
     }
 
     private boolean shouldLogRequest(String requestUri) {

@@ -35,6 +35,8 @@ services:
   redis:
     image: redis:7-alpine
     command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "6379:6379"
     volumes:
       - redis-data:/data
     healthcheck:
@@ -78,8 +80,8 @@ services:
     image: lifeagent-java:local
     environment:
       <<: *java-environment
-      SPRING_PROFILES_ACTIVE: api
       SERVER_PORT: 8080
+      MOCK_CHANNEL_ENABLED: "true"
     expose:
       - "8080"
     depends_on:
@@ -91,33 +93,6 @@ services:
         condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:8080/actuator/health/readiness"]
-      interval: 5s
-      timeout: 3s
-      retries: 30
-      start_period: 20s
-    restart: unless-stopped
-    networks:
-      - lifeagent-internal
-
-  lifeagent-java-worker:
-    build:
-      context: ./backend-java
-    image: lifeagent-java:local
-    environment:
-      <<: *java-environment
-      SPRING_PROFILES_ACTIVE: worker
-      SERVER_PORT: 8081
-    expose:
-      - "8081"
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_started
-      lifeagent-ai-python:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:8081/actuator/health/liveness"]
       interval: 5s
       timeout: 3s
       retries: 30

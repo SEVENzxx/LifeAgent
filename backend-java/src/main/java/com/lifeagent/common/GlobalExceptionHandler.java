@@ -3,6 +3,7 @@ package com.lifeagent.common;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -32,9 +33,19 @@ public class GlobalExceptionHandler {
         String message = exception.getBindingResult().getFieldErrors().stream()
                 .findFirst()
                 .map(error -> error.getField() + ": " + error.getDefaultMessage())
-                .orElse(Constants.INVALID_REQUEST_MESSAGE);
+                .orElse("请求参数不合法");
         log.warn("请求参数校验失败, message={}", message);
         return ResponseEntity.badRequest().body(ApiResponse.fail(message));
+    }
+
+    /**
+     * 处理非法 JSON 或请求体包含未知字段导致的解析异常。
+     * 返回 400，不写任何业务表。
+     */
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ResponseEntity<ApiResponse<Void>> handleHttpMessageNotReadable(HttpMessageNotReadableException exception) {
+        log.warn("请求消息不可读, message={}", exception.getMessage());
+        return ResponseEntity.badRequest().body(ApiResponse.fail("请求参数不合法"));
     }
 
     /**
@@ -45,6 +56,6 @@ public class GlobalExceptionHandler {
         // 未知异常只在统一出口打印完整堆栈，避免同一调用链重复记录异常。
         log.error("服务发生未处理异常, exceptionType={}", exception.getClass().getSimpleName(), exception);
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body(ApiResponse.fail(Constants.SERVICE_UNAVAILABLE_MESSAGE));
+                .body(ApiResponse.fail("服务暂时不可用"));
     }
 }

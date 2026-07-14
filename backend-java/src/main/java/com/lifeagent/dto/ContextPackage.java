@@ -23,8 +23,8 @@ public class ContextPackage {
      */
     @Schema(description = "当前待解析的用户消息", maxLength = Constants.MAX_MESSAGE_LENGTH)
     @JsonProperty("current_message")
-    @NotBlank(message = Constants.CURRENT_MESSAGE_REQUIRED_MESSAGE)
-    @Size(max = Constants.MAX_MESSAGE_LENGTH, message = Constants.CURRENT_MESSAGE_TOO_LONG_MESSAGE)
+    @NotBlank(message = "当前消息不能为空")
+    @Size(max = Constants.MAX_MESSAGE_LENGTH, message = "当前消息不能超过 " + Constants.MAX_MESSAGE_LENGTH + " 个字符")
     private String currentMessage;
 
     /**
@@ -32,10 +32,10 @@ public class ContextPackage {
      */
     @Schema(description = "当前仍处于打开状态的流程 ID，最多携带三个")
     @JsonProperty("open_flow_ids")
-    @NotNull(message = Constants.OPEN_FLOW_LIST_REQUIRED_MESSAGE)
-    @Size(max = Constants.MAX_OPEN_FLOW_COUNT, message = Constants.OPEN_FLOW_COUNT_EXCEEDED_MESSAGE)
+    @NotNull(message = "打开流程列表不能为空")
+    @Size(max = Constants.MAX_OPEN_FLOW_COUNT, message = "打开流程不能超过三个")
     private List<
-            @NotBlank(message = Constants.FLOW_ID_REQUIRED_MESSAGE)
-            @Size(max = Constants.MAX_IDENTIFIER_LENGTH, message = Constants.IDENTIFIER_TOO_LONG_MESSAGE)
+            @NotBlank(message = "流程 ID 不能为空")
+            @Size(max = Constants.MAX_IDENTIFIER_LENGTH, message = "标识不能超过 " + Constants.MAX_IDENTIFIER_LENGTH + " 个字符")
             String> openFlowIds;
 }

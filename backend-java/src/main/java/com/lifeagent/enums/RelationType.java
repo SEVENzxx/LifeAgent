@@ -6,7 +6,6 @@ package com.lifeagent.enums;
 public enum RelationType {
     ANSWER_FLOW("回答已有流程"),
     CONFIRM_FLOW("确认已有流程"),
-    NEW_INTENT("发起新意图"),
     SMALL_TALK("闲聊"),
     UNKNOWN("无法确定");
 

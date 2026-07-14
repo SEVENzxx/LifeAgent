@@ -7,7 +7,6 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.context.annotation.Profile;
 import org.springframework.core.env.Environment;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -16,7 +15,6 @@ import org.springframework.web.bind.annotation.RestController;
 @Slf4j
 @RequiredArgsConstructor
 @Tag(name = "系统信息", description = "查询 LifeAgent Java 服务运行信息")
-@Profile({Constants.API_PROFILE, Constants.ALL_IN_ONE_PROFILE})
 @RestController
 @RequestMapping(Constants.SYSTEM_API_PATH)
 public class SystemController {

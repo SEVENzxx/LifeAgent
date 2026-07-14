@@ -27,8 +27,8 @@ public class TurnResolutionResponse {
      */
     @Schema(description = "与请求保持一致的唯一请求 ID", maxLength = Constants.MAX_IDENTIFIER_LENGTH)
     @JsonProperty("request_id")
-    @NotBlank(message = Constants.REQUEST_ID_REQUIRED_MESSAGE)
-    @Size(max = Constants.MAX_IDENTIFIER_LENGTH, message = Constants.IDENTIFIER_TOO_LONG_MESSAGE)
+    @NotBlank(message = "请求 ID 不能为空")
+    @Size(max = Constants.MAX_IDENTIFIER_LENGTH, message = "标识不能超过 " + Constants.MAX_IDENTIFIER_LENGTH + " 个字符")
     private String requestId;
 
     /**
@@ -36,15 +36,15 @@ public class TurnResolutionResponse {
      */
     @Schema(description = "与请求保持一致的协议版本", pattern = Constants.SCHEMA_VERSION_PATTERN)
     @JsonProperty("schema_version")
-    @NotBlank(message = Constants.SCHEMA_VERSION_REQUIRED_MESSAGE)
-    @Pattern(regexp = Constants.SCHEMA_VERSION_PATTERN, message = Constants.SCHEMA_VERSION_INVALID_MESSAGE)
+    @NotBlank(message = "协议版本不能为空")
+    @Pattern(regexp = Constants.SCHEMA_VERSION_PATTERN, message = "协议版本只能包含数字")
     private String schemaVersion;
 
     /**
      * 当前消息与已有流程之间的关系
      */
     @Schema(description = "当前消息与已有流程之间的关系")
-    @NotNull(message = Constants.RELATION_TYPE_REQUIRED_MESSAGE)
+    @NotNull(message = "关系类型不能为空")
     private RelationType relation;
 
     /**
@@ -52,15 +52,15 @@ public class TurnResolutionResponse {
      */
     @Schema(description = "命中的目标流程 ID，没有命中时为空", maxLength = Constants.MAX_IDENTIFIER_LENGTH)
     @JsonProperty("target_flow_id")
-    @Size(max = Constants.MAX_IDENTIFIER_LENGTH, message = Constants.IDENTIFIER_TOO_LONG_MESSAGE)
+    @Size(max = Constants.MAX_IDENTIFIER_LENGTH, message = "标识不能超过 " + Constants.MAX_IDENTIFIER_LENGTH + " 个字符")
     private String targetFlowId;
 
     /**
      * 经过模型解析和 Python 校验的意图标识
      */
     @Schema(description = "经过模型解析和 Python 校验的意图标识", maxLength = Constants.MAX_IDENTIFIER_LENGTH)
-    @NotBlank(message = Constants.INTENT_REQUIRED_MESSAGE)
-    @Size(max = Constants.MAX_IDENTIFIER_LENGTH, message = Constants.IDENTIFIER_TOO_LONG_MESSAGE)
+    @NotBlank(message = "意图不能为空")
+    @Size(max = Constants.MAX_IDENTIFIER_LENGTH, message = "标识不能超过 " + Constants.MAX_IDENTIFIER_LENGTH + " 个字符")
     private String intent;
 
     /**
@@ -71,9 +71,9 @@ public class TurnResolutionResponse {
             minimum = Constants.MIN_CONFIDENCE_VALUE,
             maximum = Constants.MAX_CONFIDENCE_VALUE
     )
-    @NotNull(message = Constants.CONFIDENCE_REQUIRED_MESSAGE)
-    @DecimalMin(value = Constants.MIN_CONFIDENCE_VALUE, message = Constants.CONFIDENCE_TOO_LOW_MESSAGE)
-    @DecimalMax(value = Constants.MAX_CONFIDENCE_VALUE, message = Constants.CONFIDENCE_TOO_HIGH_MESSAGE)
+    @NotNull(message = "置信度不能为空")
+    @DecimalMin(value = Constants.MIN_CONFIDENCE_VALUE, message = "置信度不能小于 0.0")
+    @DecimalMax(value = Constants.MAX_CONFIDENCE_VALUE, message = "置信度不能大于 1.0")
     private Double confidence;
 
     /**
@@ -81,8 +81,8 @@ public class TurnResolutionResponse {
      */
     @Schema(description = "经过 Python 校验的建议回复，不包含模型厂商原始对象", maxLength = Constants.MAX_MESSAGE_LENGTH)
     @JsonProperty("reply_draft")
-    @NotBlank(message = Constants.REPLY_REQUIRED_MESSAGE)
-    @Size(max = Constants.MAX_MESSAGE_LENGTH, message = Constants.REPLY_TOO_LONG_MESSAGE)
+    @NotBlank(message = "建议回复不能为空")
+    @Size(max = Constants.MAX_MESSAGE_LENGTH, message = "建议回复不能超过 " + Constants.MAX_MESSAGE_LENGTH + " 个字符")
     private String replyDraft;
 
     /**
@@ -92,7 +92,7 @@ public class TurnResolutionResponse {
      */
     @JsonIgnore
     @Schema(hidden = true)
-    @AssertTrue(message = Constants.TARGET_FLOW_RELATION_INVALID_MESSAGE)
+    @AssertTrue(message = "目标流程与关系类型不匹配")
     public boolean isTargetFlowRelationValid() {
         if (relation == null) {
             return true;

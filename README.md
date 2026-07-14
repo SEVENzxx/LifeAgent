@@ -50,4 +50,6 @@ python -m pytest ai-python/tests
 
 ## 运行角色
 
-`lifeagent-java` 与 `lifeagent-java-worker` 使用同一镜像：前者启用 `api` Profile，后者启用 `worker` Profile。本地需要合并运行时可启用 `all-in-one` Profile。
+单机单用户版本只运行一个 `lifeagent-java` 进程。该进程同时提供 HTTP API，并在进程内运行消息处理、调度和 Outbox 投递任务；代码仍保持 Controller、应用服务、Worker 和渠道适配器的职责边界。
+
+后台任务可通过 `WORKER_ENABLED` 开关控制，Compose 默认显式启用。只有未来出现独立扩容或故障隔离需求时，才重新评估拆分 Worker 进程。
