@@ -44,8 +44,8 @@ python -m pytest ai-python/tests
 
 ## 开发约束
 
-- 所有新增和修改代码必须遵循 [`CODING_STANDARDS.md`](./CODING_STANDARDS.md)。
-- Java 与 Python 的轮次解析模型必须遵循 [`docs/AI_PROTOCOL.md`](./docs/AI_PROTOCOL.md)，协议字段变更时同步修改两端模型、文档和测试。
+- 完整 PRD、架构、协议、编码规范和任务卡由独立的本地私有文档仓库维护，不随本公开代码仓库发布。
+- Java 与 Python 的轮次解析协议发生变化时，必须在同一任务中同步修改两端模型、公开接口说明和契约测试。
 - AI 工具不得执行 `git add`、`git commit` 或 `git push`，代码必须经过人工 review 后再提交。
 
 ## 运行角色
