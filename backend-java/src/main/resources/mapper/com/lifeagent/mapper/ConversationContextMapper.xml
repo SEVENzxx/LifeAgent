@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.lifeagent.mapper.ConversationContextMapper">
+
+    <!-- 插入或忽略 -->
+    <insert id="insertIgnore">
+        INSERT INTO conversation_contexts
+            (user_id, summary, summarized_through_message_id,
+             last_intent, last_confidence, last_resolved_message_id,
+             created_at, updated_at)
+        VALUES (#{userId}, #{summary}, #{summarizedThroughMessageId},
+                #{lastIntent}, #{lastConfidence}, #{lastResolvedMessageId},
+                #{createdAt}, #{updatedAt})
+        ON CONFLICT (user_id) DO NOTHING
+    </insert>
+
+    <!-- 更新摘要和截止消息 ID -->
+    <update id="updateSummary">
+        UPDATE conversation_contexts
+        SET summary = #{summary},
+            summarized_through_message_id = #{summarizedThroughMessageId},
+            updated_at = #{now}
+        WHERE user_id = #{userId}
+    </update>
+
+    <!-- 更新最近语义识别结果 -->
+    <update id="updateLastResolution">
+        UPDATE conversation_contexts
+        SET last_intent = #{lastIntent},
+            last_confidence = #{lastConfidence}::NUMERIC(5,4),
+            last_resolved_message_id = #{lastResolvedMessageId},
+            updated_at = #{now}
+        WHERE user_id = #{userId}
+    </update>
+
+</mapper>

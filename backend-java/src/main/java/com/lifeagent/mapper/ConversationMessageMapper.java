@@ -16,6 +16,12 @@ public interface ConversationMessageMapper extends BaseMapper<ConversationMessag
     int insertIgnore(ConversationMessageEntity entity);
 
     /**
+     * 使用 ON CONFLICT DO NOTHING 安全插入 ASSISTANT 消息。
+     * ASSISTANT 唯一约束为 idempotency_key WHERE role = 'ASSISTANT'。
+     */
+    int insertIgnoreAssistant(ConversationMessageEntity entity);
+
+    /**
      * 更新 ASSISTANT 投递状态和发送时间。
      *
      * @param id             ASSISTANT 消息 ID

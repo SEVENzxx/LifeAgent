@@ -1,53 +1,46 @@
-from enum import Enum
 from typing import Annotated, Self
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator, StringConstraints
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from lifeagent_ai.config import (
-    DEFAULT_SCHEMA_VERSION,
-    MAX_IDENTIFIER_LENGTH,
+    CONTEXT_RECENT_MAX_CHARS,
+    CONTEXT_RECENT_MAX_MESSAGES,
+    CONTEXT_SUMMARY_MAX_CHARS,
     MAX_MESSAGE_LENGTH,
-    MAX_OPEN_FLOW_COUNT,
+    MAX_IDENTIFIER_LENGTH,
+    RESOLUTION_AI_UNAVAILABLE,
+    RESOLUTION_RESOLVED,
     SCHEMA_VERSION_PATTERN,
-    TARGET_FLOW_FORBIDDEN_MESSAGE,
-    TARGET_FLOW_REQUIRED_MESSAGE,
+    VALID_INTENTS,
+    VALID_RESOLUTION_STATUSES,
 )
-
 
 MessageText = Annotated[
     str,
-    StringConstraints(strip_whitespace=True, min_length=1, max_length=MAX_MESSAGE_LENGTH),
-]
-FlowId = Annotated[
-    str,
-    StringConstraints(strip_whitespace=True, min_length=1, max_length=MAX_IDENTIFIER_LENGTH),
+    Field(min_length=1, max_length=MAX_MESSAGE_LENGTH),
 ]
 IntentName = Annotated[
     str,
-    StringConstraints(strip_whitespace=True, min_length=1, max_length=MAX_IDENTIFIER_LENGTH),
+    Field(min_length=1, max_length=MAX_IDENTIFIER_LENGTH),
 ]
 ReplyDraft = Annotated[
-    str,
-    StringConstraints(strip_whitespace=True, min_length=1, max_length=MAX_MESSAGE_LENGTH),
+    str | None,
+    Field(None, min_length=1, max_length=MAX_MESSAGE_LENGTH),
+]
+SummaryText = Annotated[
+    str | None,
+    Field(None, min_length=1, max_length=CONTEXT_SUMMARY_MAX_CHARS),
 ]
 
 
-class RelationType(str, Enum):
-    """当前消息与开放流程之间的关系。"""
+class ContextMessageItem(BaseModel):
+    """近期消息或待摘要消息项。"""
 
-    ANSWER_FLOW = "ANSWER_FLOW"
-    CONFIRM_FLOW = "CONFIRM_FLOW"
-    NEW_INTENT = "NEW_INTENT"
-    SMALL_TALK = "SMALL_TALK"
-    UNKNOWN = "UNKNOWN"
+    model_config = ConfigDict(extra="forbid", frozen=True)
 
-    def __str__(self) -> str:
-        return self.value
-
-    @property
-    def requires_target_flow(self) -> bool:
-        """返回当前关系是否必须绑定一个开放流程。"""
-        return self in (RelationType.ANSWER_FLOW, RelationType.CONFIRM_FLOW)
+    message_id: int = Field(description="消息 ID")
+    role: str = Field(pattern=r"^(USER|ASSISTANT)$", description="角色")
+    content: str = Field(min_length=1, max_length=MAX_MESSAGE_LENGTH, description="消息正文")
 
 
 class ContextPackage(BaseModel):
@@ -56,10 +49,22 @@ class ContextPackage(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     current_message: MessageText = Field(description="当前用户消息正文")
-    open_flow_ids: list[FlowId] = Field(
+    memory_summary: str | None = Field(
+        default=None, max_length=CONTEXT_SUMMARY_MAX_CHARS,
+        description="已有滚动摘要",
+    )
+    recent_messages: list[ContextMessageItem] = Field(
         default_factory=list,
-        max_length=MAX_OPEN_FLOW_COUNT,
-        description="当前可继续处理的开放流程 ID，最多三个",
+        max_length=CONTEXT_RECENT_MAX_MESSAGES,
+        description="近期窗口消息，最多 12 条",
+    )
+    summary_requested: bool = Field(
+        default=False,
+        description="Java 是否要求本轮生成新摘要",
+    )
+    summary_messages: list[ContextMessageItem] = Field(
+        default_factory=list,
+        description="本批待摘要的旧消息（summary_requested 为 true 时才有值）",
     )
 
 
@@ -68,9 +73,12 @@ class TurnResolutionRequest(BaseModel):
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    request_id: FlowId = Field(description="本次模型调用的稳定请求 ID")
+    request_id: str = Field(
+        min_length=1, max_length=MAX_IDENTIFIER_LENGTH,
+        description="本次模型调用的稳定请求 ID",
+    )
     schema_version: str = Field(
-        default=DEFAULT_SCHEMA_VERSION,
+        default="1",
         pattern=SCHEMA_VERSION_PATTERN,
         description="跨服务协议版本",
     )
@@ -82,24 +90,49 @@ class TurnResolutionResponse(BaseModel):
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    request_id: FlowId = Field(description="与请求保持一致的稳定请求 ID")
+    request_id: str = Field(
+        min_length=1, max_length=MAX_IDENTIFIER_LENGTH,
+        description="与请求保持一致的稳定请求 ID",
+    )
     schema_version: str = Field(
-        default=DEFAULT_SCHEMA_VERSION,
+        default="1",
         pattern=SCHEMA_VERSION_PATTERN,
         description="与请求保持一致的协议版本",
     )
-    relation: RelationType = Field(description="当前消息与开放流程的关系")
-    target_flow_id: FlowId | None = Field(default=None, description="命中的开放流程 ID；未命中时为空")
-    intent: IntentName = Field(description="经过结构化校验的意图名称")
-    confidence: float = Field(ge=0, le=1, description="模型判断置信度，范围为 0.0 到 1.0")
-    reply_draft: ReplyDraft = Field(description="供 Java 侧审核和发送的回复草稿")
+    resolution_status: str = Field(
+        description="解析状态：RESOLVED / NEEDS_CLARIFICATION / AI_UNAVAILABLE",
+    )
+    intent: str = Field(description="五种 Intent 之一")
+    confidence: float = Field(ge=0, le=1, description="模型判断置信度")
+    reply_draft: str | None = Field(
+        default=None, min_length=1, max_length=MAX_MESSAGE_LENGTH,
+        description="回复草稿；AI 不可用时为空",
+    )
+    updated_summary: str | None = Field(
+        default=None, max_length=CONTEXT_SUMMARY_MAX_CHARS,
+        description="仅摘要成功时返回，最长 1,500",
+    )
 
     @model_validator(mode="after")
-    def validate_target_flow_relation(self) -> Self:
-        """校验关系类型与目标流程是否匹配，防止模型输出自相矛盾。"""
-        # 该约束属于 Java/Python 跨服务协议，必须在模型输出进入业务层前统一执行。
-        if self.relation.requires_target_flow and self.target_flow_id is None:
-            raise ValueError(TARGET_FLOW_REQUIRED_MESSAGE)
-        if not self.relation.requires_target_flow and self.target_flow_id is not None:
-            raise ValueError(TARGET_FLOW_FORBIDDEN_MESSAGE)
+    def validate_cross_field_constraints(self) -> Self:
+        """校验跨字段约束。"""
+        status = self.resolution_status
+        intent = self.intent
+        if status not in VALID_RESOLUTION_STATUSES:
+            raise ValueError(f"未知 resolution_status: {status}")
+        if intent not in VALID_INTENTS:
+            raise ValueError(f"未知 intent: {intent}")
+
+        if status == RESOLUTION_RESOLVED:
+            if not self.reply_draft:
+                raise ValueError("RESOLVED 状态要求 reply_draft 必填")
+
+        if status == RESOLUTION_AI_UNAVAILABLE:
+            if self.confidence != 0.0:
+                raise ValueError("AI_UNAVAILABLE 状态要求 confidence 为 0")
+            if self.reply_draft is not None:
+                raise ValueError("AI_UNAVAILABLE 状态要求 reply_draft 为 null")
+            if self.updated_summary is not None:
+                raise ValueError("AI_UNAVAILABLE 状态要求 updated_summary 为 null")
+
         return self

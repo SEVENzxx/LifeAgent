@@ -1,5 +1,7 @@
 package com.lifeagent.wecom;
 
+import com.lifeagent.ai.ReplyService;
+import com.lifeagent.config.AsyncConfig;
 import com.lifeagent.config.WeComCrypto;
 import com.lifeagent.config.WeComProperties;
 import com.lifeagent.dto.InboundMessageCommand;
@@ -14,12 +16,13 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Captor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.core.task.TaskExecutor;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneId;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
@@ -47,13 +50,13 @@ class WeComCallbackServiceTest {
     private ConversationService conversationService;
 
     @Mock
+    private ReplyService replyService;
+
+    @Mock
     private ConversationMessageMapper conversationMessageMapper;
 
     @Mock
     private WeComApiClient weComApiClient;
-
-    @Mock
-    private TaskExecutor applicationTaskExecutor;
 
     @Captor
     private ArgumentCaptor<InboundMessageCommand> commandCaptor;
@@ -61,6 +64,7 @@ class WeComCallbackServiceTest {
     private WeComCallbackService service;
     private WeComCrypto crypto;
     private WeComProperties properties;
+    private ExecutorService aiTaskExecutor;
 
     @BeforeEach
     void setUp() {
@@ -72,10 +76,10 @@ class WeComCallbackServiceTest {
         properties.setEncodingAesKey(ENCODING_AES_KEY);
         properties.setCorpSecret(CORP_SECRET);
 
-        service = new WeComCallbackService(properties, conversationService,
-                conversationMessageMapper, weComApiClient, fixedClock);
+        aiTaskExecutor = Executors.newSingleThreadExecutor();
+        service = new WeComCallbackService(properties, conversationService, replyService, fixedClock);
         service.initCrypto();
-        ReflectionTestUtils.setField(service, "taskExecutor", applicationTaskExecutor);
+        ReflectionTestUtils.setField(service, "aiTaskExecutor", aiTaskExecutor);
         crypto = new WeComCrypto(ENCODING_AES_KEY, TOKEN);
     }
 
@@ -202,7 +206,9 @@ class WeComCallbackServiceTest {
     @DisplayName("POST 回调：完整加密文本流程返回 200 success")
     void fullEncryptedCallbackReturns200() {
         when(conversationService.processInboundMessage(any())).thenReturn(
-                new InboundMessageResponse(true, false, 1L, "收到，我已经记录这条消息。"));
+                InboundMessageResponse.builder()
+                        .accepted(true).duplicate(false).messageId(1L)
+                        .userId(1L).bindingId(1L).build());
 
         String innerXml = "<xml>"
                 + "<ToUserName><![CDATA[" + CORP_ID + "]]></ToUserName>"
@@ -349,10 +355,12 @@ class WeComCallbackServiceTest {
     // ==================== 异步发送 ====================
 
     @Test
-    @DisplayName("POST 回调：首次消息触发异步发送")
-    void firstMessageTriggersAsyncSend() {
+    @DisplayName("POST 回调：首次消息触发异步 AI 任务")
+    void firstMessageTriggersAsyncAiTask() {
         when(conversationService.processInboundMessage(any())).thenReturn(
-                new InboundMessageResponse(true, false, 1L, "收到，我已经记录这条消息。"));
+                InboundMessageResponse.builder()
+                        .accepted(true).duplicate(false).messageId(1L)
+                        .userId(1L).bindingId(1L).build());
 
         String innerXml = "<xml>"
                 + "<ToUserName><![CDATA[" + CORP_ID + "]]></ToUserName>"
@@ -366,14 +374,16 @@ class WeComCallbackServiceTest {
 
         sendEncryptedPost(innerXml);
 
-        verify(applicationTaskExecutor).execute(any(Runnable.class));
+        verify(replyService, timeout(5000)).processAsync(eq(1L), eq(1L),
+                eq("WECOM:12345"), eq("user001"), eq("你好"));
     }
 
     @Test
-    @DisplayName("POST 回调：重复消息不触发异步发送")
-    void duplicateMessageDoesNotTriggerAsyncSend() {
+    @DisplayName("POST 回调：重复消息不触发异步任务")
+    void duplicateMessageDoesNotTriggerAsyncTask() {
         when(conversationService.processInboundMessage(any())).thenReturn(
-                new InboundMessageResponse(true, true, 1L, "收到，我已经记录这条消息。"));
+                InboundMessageResponse.builder()
+                        .accepted(true).duplicate(true).messageId(1L).build());
 
         String innerXml = "<xml>"
                 + "<ToUserName><![CDATA[" + CORP_ID + "]]></ToUserName>"
@@ -387,7 +397,29 @@ class WeComCallbackServiceTest {
 
         sendEncryptedPost(innerXml);
 
-        verify(applicationTaskExecutor, never()).execute(any(Runnable.class));
+        verify(replyService, never()).processAsync(any(), any(), any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("POST 回调：首次消息但无 userId 时不触发异步任务")
+    void firstMessageWithoutUserIdDoesNotTriggerAsync() {
+        when(conversationService.processInboundMessage(any())).thenReturn(
+                InboundMessageResponse.builder()
+                        .accepted(true).duplicate(false).messageId(1L).build());
+
+        String innerXml = "<xml>"
+                + "<ToUserName><![CDATA[" + CORP_ID + "]]></ToUserName>"
+                + "<FromUserName><![CDATA[user001]]></FromUserName>"
+                + "<CreateTime>" + fixedClock.instant().getEpochSecond() + "</CreateTime>"
+                + "<MsgType><![CDATA[text]]></MsgType>"
+                + "<Content><![CDATA[你好]]></Content>"
+                + "<MsgId>12345</MsgId>"
+                + "<AgentID>" + AGENT_ID + "</AgentID>"
+                + "</xml>";
+
+        sendEncryptedPost(innerXml);
+
+        verify(replyService, never()).processAsync(any(), any(), any(), any(), any());
     }
 
     // ==================== 辅助方法 ====================

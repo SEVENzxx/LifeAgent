@@ -1,5 +1,6 @@
 package com.lifeagent.wecom;
 
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.lifeagent.config.WeComCrypto;
 import com.lifeagent.config.WeComProperties;
 import com.lifeagent.entity.ChannelBindingEntity;
@@ -85,7 +86,10 @@ class WeComCallbackIntegrationTest {
 
     @BeforeEach
     void setUp() {
-        conversationMessageMapper.delete(null);
+        // 异步 AI 任务可能在清理间隙创建 ASSISTANT，循环删除确保完全清空后再删关联表
+        while (conversationMessageMapper.selectCount(null) > 0) {
+            conversationMessageMapper.delete(null);
+        }
         channelBindingMapper.delete(null);
         userMapper.delete(null);
 
@@ -96,8 +100,8 @@ class WeComCallbackIntegrationTest {
     }
 
     @Test
-    @DisplayName("首次加密文本回调：HTTP 200 success，创建 WECOM 绑定、USER 和 ASSISTANT(CREATED)")
-    void firstEncryptedCallbackCreatesRows() {
+    @DisplayName("首次加密文本回调：HTTP 200 success，仅创建 WECOM 绑定和 USER(CREATED)")
+    void firstEncryptedCallbackCreatesUserOnly() {
         String innerXml = "<xml>"
                 + "<ToUserName><![CDATA[" + CORP_ID + "]]></ToUserName>"
                 + "<FromUserName><![CDATA[" + FROM_USER + "]]></FromUserName>"
@@ -113,8 +117,9 @@ class WeComCallbackIntegrationTest {
         assertEquals(HttpStatus.OK, response.getStatusCode());
         assertEquals("success", response.getBody());
 
+        // 同步只持久化 USER 消息，ASSISTANT 由异步 AI 任务创建
         List<ConversationMessageEntity> messages = conversationMessageMapper.selectList(null);
-        assertEquals(2, messages.size());
+        assertEquals(1, messages.size());
 
         ConversationMessageEntity userMsg = messages.stream()
                 .filter(m -> MessageRole.USER.name().equals(m.getRole()))
@@ -122,12 +127,6 @@ class WeComCallbackIntegrationTest {
         assertEquals("你好", userMsg.getContent());
         assertEquals("WECOM:" + MSG_ID, userMsg.getIdempotencyKey());
         assertEquals(DeliveryStatus.CREATED.name(), userMsg.getDeliveryStatus());
-
-        ConversationMessageEntity assistantMsg = messages.stream()
-                .filter(m -> MessageRole.ASSISTANT.name().equals(m.getRole()))
-                .findFirst().orElseThrow();
-        assertEquals("收到，我已经记录这条消息。", assistantMsg.getContent());
-        assertEquals(DeliveryStatus.CREATED.name(), assistantMsg.getDeliveryStatus());
 
         List<ChannelBindingEntity> bindings = channelBindingMapper.selectList(null);
         assertEquals(1, bindings.size());
@@ -138,8 +137,8 @@ class WeComCallbackIntegrationTest {
     }
 
     @Test
-    @DisplayName("重复 MsgId 回调：HTTP 200，不新增行")
-    void duplicateMsgIdReturnsSuccessNoNewRows() {
+    @DisplayName("重复 MsgId 回调：HTTP 200，不新增 USER")
+    void duplicateMsgIdReturnsSuccessNoNewUserRows() {
         String innerXml = "<xml>"
                 + "<ToUserName><![CDATA[" + CORP_ID + "]]></ToUserName>"
                 + "<FromUserName><![CDATA[" + FROM_USER + "]]></FromUserName>"
@@ -153,13 +152,15 @@ class WeComCallbackIntegrationTest {
         ResponseEntity<String> firstResp = sendEncryptedPost(innerXml);
         assertEquals(HttpStatus.OK, firstResp.getStatusCode());
 
-        long initialCount = conversationMessageMapper.selectCount(null).intValue();
-
         ResponseEntity<String> secondResp = sendEncryptedPost(innerXml);
         assertEquals(HttpStatus.OK, secondResp.getStatusCode());
         assertEquals("success", secondResp.getBody());
 
-        assertEquals(initialCount, conversationMessageMapper.selectCount(null).intValue());
+        // 验证不新增 USER（异步 AI 可能已创建 ASSISTANT）
+        long userCount = conversationMessageMapper.selectCount(
+                new LambdaQueryWrapper<ConversationMessageEntity>()
+                        .eq(ConversationMessageEntity::getRole, MessageRole.USER));
+        assertEquals(1, userCount);
     }
 
     @Test

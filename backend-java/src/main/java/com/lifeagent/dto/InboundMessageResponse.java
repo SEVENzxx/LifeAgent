@@ -1,15 +1,15 @@
 package com.lifeagent.dto;
 
 import io.swagger.v3.oas.annotations.media.Schema;
-import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.Data;
 
 /**
- * Mock 入站消息响应。
+ * 入站消息响应。
  */
 @Data
-@AllArgsConstructor
-@Schema(description = "Mock 入站消息响应")
+@Builder
+@Schema(description = "入站消息响应")
 public class InboundMessageResponse {
 
     @Schema(description = "是否已接受")
@@ -21,6 +21,9 @@ public class InboundMessageResponse {
     @Schema(description = "USER 消息 ID")
     private Long messageId;
 
-    @Schema(description = "回复内容")
-    private String reply;
+    @Schema(description = "用户 ID")
+    private Long userId;
+
+    @Schema(description = "渠道绑定 ID")
+    private Long bindingId;
 }

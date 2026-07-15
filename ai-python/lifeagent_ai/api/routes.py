@@ -6,26 +6,28 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Header, HTTPException, status
 
 from lifeagent_ai.config import (
-    API_PREFIX,
     INTERNAL_TOKEN_HEADER,
-    INVALID_INTERNAL_TOKEN_MESSAGE,
-    LIVENESS_PATH,
-    READINESS_PATH,
+    ProviderType,
     Settings,
-    TURN_RESOLUTION_PATH,
     get_settings,
 )
-from lifeagent_ai.schemas import HealthResponse, HealthStatus, TurnResolutionRequest, TurnResolutionResponse
-from lifeagent_ai.services import TurnResolverService, create_turn_resolver_service
+from lifeagent_ai.providers.base import ModelProvider
+from lifeagent_ai.providers.openai_compat import OpenAICompatProvider
+from lifeagent_ai.schemas import HealthResponse, TurnResolutionRequest, TurnResolutionResponse
+from lifeagent_ai.schemas.common import HealthStatus
+from lifeagent_ai.services.turn_resolver import resolve_turn
 
-router = APIRouter(prefix=API_PREFIX)
+router = APIRouter(prefix="/internal/v1")
 logger = logging.getLogger(__name__)
 
 
 @lru_cache()
-def get_turn_resolver_service() -> TurnResolverService:
-    """创建并缓存无状态轮次解析 Service，避免每次请求重复构造 Provider。"""
-    return create_turn_resolver_service(get_settings())
+def get_model_provider() -> ModelProvider:
+    """创建并缓存无状态 ModelProvider，避免每次请求重复构造。"""
+    settings = get_settings()
+    if settings.llm_provider == ProviderType.OPENAI_COMPAT:
+        return OpenAICompatProvider(settings)
+    raise ValueError(f"不支持的 LLM Provider: {settings.llm_provider}")
 
 
 def verify_internal_token(
@@ -35,17 +37,16 @@ def verify_internal_token(
         Header(alias=INTERNAL_TOKEN_HEADER, description="Java 调用 AI 服务使用的内部鉴权令牌"),
     ] = None,
 ) -> None:
-    """使用常量时间比较校验内部令牌，避免普通字符串比较泄露时序信息。"""
     token = x_internal_token or ""
     if not hmac.compare_digest(token, settings.internal_service_token):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=INVALID_INTERNAL_TOKEN_MESSAGE,
+            detail="内部服务令牌无效",
         )
 
 
 @router.get(
-    LIVENESS_PATH,
+    "/health/live",
     response_model=HealthResponse,
     summary="检查 AI 服务存活状态",
     description="确认 FastAPI 进程已经启动，并返回当前配置的模型提供方。",
@@ -53,12 +54,11 @@ def verify_internal_token(
 async def liveness(
     settings: Annotated[Settings, Depends(get_settings)],
 ) -> HealthResponse:
-    """返回进程存活状态，不调用外部模型服务。"""
-    return HealthResponse(status=HealthStatus.UP, provider=settings.llm_provider)
+    return HealthResponse(status="UP", provider=settings.llm_provider)
 
 
 @router.get(
-    READINESS_PATH,
+    "/health/ready",
     response_model=HealthResponse,
     summary="检查 AI 服务就绪状态",
     description="校验当前模型 Provider 配置是否足以创建轮次解析服务。",
@@ -66,37 +66,34 @@ async def liveness(
 async def readiness(
     settings: Annotated[Settings, Depends(get_settings)],
 ) -> HealthResponse:
-    """校验 Provider 配置并返回服务就绪状态，不发起真实模型请求。"""
-    try:
-        create_turn_resolver_service(settings)
-    except ValueError as exception:
-        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exception)) from exception
-    return HealthResponse(status=HealthStatus.UP, provider=settings.llm_provider)
+    OpenAICompatProvider(settings)
+    return HealthResponse(status="UP", provider=settings.llm_provider)
 
 
 @router.post(
-    TURN_RESOLUTION_PATH,
+    "/turns/resolve",
     response_model=TurnResolutionResponse,
     dependencies=[Depends(verify_internal_token)],
     summary="解析当前对话轮次",
-    description="根据 Java 提供的裁剪上下文判断消息关系和意图，并返回经过 Pydantic 校验的结果。",
+    description="根据 Java 提供的裁剪上下文判断消息意图并返回经过 Pydantic 校验的结果。",
 )
-async def resolve_turn(
+async def resolve_turn_handler(
     request: TurnResolutionRequest,
-    service: Annotated[TurnResolverService, Depends(get_turn_resolver_service)],
+    provider: Annotated[ModelProvider, Depends(get_model_provider)],
 ) -> TurnResolutionResponse:
-    """调用轮次解析 Service；日志只记录协议标识、枚举和统计信息。"""
     logger.info(
-        "轮次解析请求进入, requestId=%s, schemaVersion=%s, openFlowCount=%s",
+        "轮次解析请求进入, requestId=%s, schemaVersion=%s, currentMessageLen=%s, recentCount=%s",
         request.request_id,
         request.schema_version,
-        len(request.context.open_flow_ids),
+        len(request.context.current_message),
+        len(request.context.recent_messages),
     )
-    response = await service.resolve(request)
+    response = await resolve_turn(provider, request)
     logger.info(
-        "轮次解析处理完成, requestId=%s, relation=%s, confidence=%s",
+        "轮次解析处理完成, requestId=%s, resolutionStatus=%s, intent=%s, confidence=%s",
         request.request_id,
-        response.relation,
+        response.resolution_status,
+        response.intent,
         response.confidence,
     )
     return response

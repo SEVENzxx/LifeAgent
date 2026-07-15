@@ -1,7 +1,8 @@
 package com.lifeagent.wecom;
 
-import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.lifeagent.ai.ReplyService;
 import com.lifeagent.common.Constants;
+import com.lifeagent.config.AsyncConfig;
 import com.lifeagent.config.WeComCrypto;
 import com.lifeagent.config.WeComCrypto.DecryptResult;
 import com.lifeagent.config.WeComProperties;
@@ -11,25 +12,20 @@ import com.lifeagent.config.WeComXmlParser.TextMessageXml;
 import com.lifeagent.dto.InboundMessageCommand;
 import com.lifeagent.dto.InboundMessageResponse;
 import com.lifeagent.dto.WeComCallbackParams;
-import com.lifeagent.entity.ConversationMessageEntity;
-import com.lifeagent.enums.DeliveryStatus;
-import com.lifeagent.enums.MessageRole;
-import com.lifeagent.mapper.ConversationMessageMapper;
 import com.lifeagent.service.ConversationService;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.Resource;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
-import org.springframework.core.task.TaskExecutor;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 
 import java.time.Clock;
 import java.time.Instant;
-import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
+import java.util.concurrent.ExecutorService;
 
 /**
  * 企业微信回调业务服务。
@@ -37,7 +33,7 @@ import java.time.ZoneOffset;
  * <p>承担验签、解密、XML 解析、字段校验等 WeCom 专属逻辑，
  * 输出渠道中立的 {@link InboundMessageCommand} 委托给
  * {@link ConversationService} 持久化。首次消息的事务提交后，
- * 通过 {@link TaskExecutor} 异步调用 {@link WeComApiClient} 发送固定回复。</p>
+ * 通过单线程执行器提交异步 AI 任务（{@link ReplyService#processAsync}）。</p>
  */
 @Slf4j
 @RequiredArgsConstructor
@@ -47,12 +43,11 @@ public class WeComCallbackService {
 
     private final WeComProperties properties;
     private final ConversationService conversationService;
-    private final ConversationMessageMapper conversationMessageMapper;
-    private final WeComApiClient weComApiClient;
+    private final ReplyService replyService;
     private final Clock clock;
 
-    @Resource(name = "applicationTaskExecutor")
-    private TaskExecutor taskExecutor;
+    @Resource(name = AsyncConfig.AI_TASK_EXECUTOR)
+    private ExecutorService aiTaskExecutor;
 
     private WeComCrypto weComCrypto;
     private WeComXmlParser xmlParser;
@@ -127,8 +122,9 @@ public class WeComCallbackService {
     /**
      * 接收并处理企业微信推送的加密消息。
      *
-     * <p>验签、解密、解析文本消息后，以幂等方式持久化 USER + ASSISTANT(CREATED)。
-     * 首次消息在事务提交后提交一次异步发送任务，返回 success。</p>
+     * <p>验签、解密、解析文本消息后，以幂等方式仅持久化 USER（CREATED），
+     * 不在事务中预创建 ASSISTANT。首次消息在事务提交后提交一次异步 AI 任务，
+     * 由 {@link ReplyService} 负责上下文读取、AI 调用、ASSISTANT 保存和渠道发送。</p>
      */
     public WeComCallbackResult receiveMessage(String msgSignature, String timestamp, String nonce, String body) {
         if (isBlank(msgSignature) || isBlank(timestamp) || isBlank(nonce) || isBlank(body)) {
@@ -226,9 +222,13 @@ public class WeComCallbackService {
 
         try {
             InboundMessageResponse response = conversationService.processInboundMessage(command);
-            if (!response.isDuplicate()) {
+            if (!response.isDuplicate() && response.getUserId() != null && response.getBindingId() != null) {
                 String idempotencyKey = Constants.CHANNEL_WECOM + ":" + textMsg.msgId();
-                triggerAsyncSend(textMsg.fromUserName(), idempotencyKey);
+                String currentMessage = textMsg.content();
+                Long userId = response.getUserId();
+                Long bindingId = response.getBindingId();
+                String externalUserId = textMsg.fromUserName();
+                aiTaskExecutor.submit(() -> replyService.processAsync(userId, bindingId, idempotencyKey, externalUserId, currentMessage));
             }
         } catch (DataIntegrityViolationException e) {
             log.error("POST 回调数据库完整性错误, msgId={}", textMsg.msgId(), e);
@@ -240,38 +240,6 @@ public class WeComCallbackService {
 
         log.info("POST 回调处理成功, msgId={}", textMsg.msgId());
         return new WeComCallbackResult(200, "success");
-    }
-
-    /**
-     * 提交一次进程内异步发送任务。
-     * <p>发送成功更新 ASSISTANT 为 SENT + sent_at，失败更新为 FAILED。</p>
-     */
-    private void triggerAsyncSend(String externalUserId, String idempotencyKey) {
-        taskExecutor.execute(() -> {
-            try {
-                ConversationMessageEntity assistant = conversationMessageMapper.selectOne(
-                        new LambdaQueryWrapper<ConversationMessageEntity>()
-                                .eq(ConversationMessageEntity::getIdempotencyKey, idempotencyKey)
-                                .eq(ConversationMessageEntity::getRole, MessageRole.ASSISTANT.name()));
-                if (assistant == null) {
-                    log.warn("异步发送未找到 ASSISTANT 消息, idempotencyKey={}", idempotencyKey);
-                    return;
-                }
-                boolean sent = weComApiClient.sendTextMessage(externalUserId, assistant.getContent());
-                if (sent) {
-                    conversationMessageMapper.updateDeliveryStatus(
-                            assistant.getId(), DeliveryStatus.SENT.name(),
-                            LocalDateTime.now(clock).withNano(0));
-                    log.info("异步发送成功, idempotencyKey={}, messageId={}", idempotencyKey, assistant.getId());
-                } else {
-                    conversationMessageMapper.updateDeliveryStatus(
-                            assistant.getId(), DeliveryStatus.FAILED.name(), null);
-                    log.info("异步发送失败, idempotencyKey={}, messageId={}", idempotencyKey, assistant.getId());
-                }
-            } catch (Exception e) {
-                log.error("异步发送异常, idempotencyKey={}", idempotencyKey, e);
-            }
-        });
     }
 
     // ==================== 私有工具方法 ====================

@@ -23,7 +23,6 @@ import java.util.Map;
  */
 @Slf4j
 @Component
-@ConditionalOnProperty(name = "lifeagent.wecom.enabled", havingValue = "true")
 public class WeComApiClient {
 
     private static final Duration TOKEN_REFRESH_MARGIN = Duration.ofMinutes(5);

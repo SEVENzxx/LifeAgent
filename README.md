@@ -6,7 +6,7 @@ LifeAgent 采用 Java 控制面与 Python AI Sidecar。Java 和 PostgreSQL 是�
 
 - Java 17、Spring Boot 3.5.3、Maven 单模块、MyBatis-Plus 3.5.12、SpringDoc OpenAPI 2.8.17
 - PostgreSQL 16、Redis 7、Flyway
-- Python 3.11、FastAPI、Pydantic、DeepSeek/Mock Provider
+- Python 3.11、FastAPI、Pydantic、Mock/OpenAI-Compatible Provider
 - Docker Compose、Nginx
 
 ## 启动
@@ -25,7 +25,7 @@ docker compose up --build --wait
 - Java OpenAPI：`http://localhost:8080/v3/api-docs`
 - Java Swagger UI：`http://localhost:8080/swagger-ui/index.html`
 
-使用真实 DeepSeek 前，把 `.env.example` 复制为 `.env`，将 `LLM_PROVIDER` 改为 `deepseek` 并设置 `DEEPSEEK_API_KEY`。
+使用真实模型前，把 `.env.example` 复制为 `.env`，将 `LLM_PROVIDER` 改为 `openai-compat` 并配置 `OPENAI_COMPAT_API_KEY`（阿里百炼等 OpenAI 兼容平台密钥）。
 
 ## 本地测试
 

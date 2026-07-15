@@ -2,10 +2,7 @@ package com.lifeagent;
 
 import com.lifeagent.common.ApiResponse;
 import com.lifeagent.controller.SystemController;
-import com.lifeagent.dto.ContextPackage;
 import com.lifeagent.dto.SystemInfoResponse;
-import com.lifeagent.dto.TurnResolutionRequest;
-import com.lifeagent.dto.TurnResolutionResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -35,10 +32,7 @@ class CodingStandardsAnnotationTest {
     void shouldDocumentEveryDtoFieldWithSchemaDescription() {
         Stream.of(
                         ApiResponse.class,
-                        ContextPackage.class,
-                        SystemInfoResponse.class,
-                        TurnResolutionRequest.class,
-                        TurnResolutionResponse.class
+                        SystemInfoResponse.class
                 )
                 .flatMap(type -> Stream.of(type.getDeclaredFields()))
                 .forEach(this::assertHasSchemaDescription);

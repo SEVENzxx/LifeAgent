@@ -52,8 +52,6 @@ management:
           include: readinessState,db
 
 lifeagent:
-  mock-channel:
-    enabled: ${MOCK_CHANNEL_ENABLED:false}
   wecom:
     enabled: ${WECOM_CHANNEL_ENABLED:false}
     corp-id: ${WECOM_CORP_ID:}
@@ -62,6 +60,17 @@ lifeagent:
     encoding-aes-key: ${WECOM_ENCODING_AES_KEY:}
     corp-secret: ${WECOM_CORP_SECRET:}
     api-base-url: ${WECOM_API_BASE_URL:https://qyapi.weixin.qq.com}
+  ai:
+    base-url: ${AI_BASE_URL:http://localhost:8000}
+    internal-token: ${INTERNAL_SERVICE_TOKEN:lifeagent-local-token}
+    connect-timeout-ms: ${AI_CONNECT_TIMEOUT_MS:2000}
+    read-timeout-ms: ${AI_READ_TIMEOUT_MS:15000}
+    recent-max-messages: ${CONTEXT_RECENT_MAX_MESSAGES:12}
+    recent-max-chars: ${CONTEXT_RECENT_MAX_CHARS:6000}
+    summary-trigger-messages: ${CONTEXT_SUMMARY_TRIGGER_MESSAGES:20}
+    summary-trigger-chars: ${CONTEXT_SUMMARY_TRIGGER_CHARS:8000}
+    summary-max-chars: ${CONTEXT_SUMMARY_MAX_CHARS:1500}
+    context-cache-ttl-seconds: ${CONTEXT_CACHE_TTL:86400}
 
 logging:
   pattern:

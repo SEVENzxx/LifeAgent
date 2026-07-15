@@ -6,16 +6,13 @@ import lombok.Value;
 import java.time.OffsetDateTime;
 
 /**
- * 渠道中立的入站消息参数。
- *
- * <p>Mock 和 WeCom 等渠道统一使用该 DTO 将会话服务与渠道 HTTP 契约解耦。
- * {@code channel} 决定 ASSISTANT 的投递方式：Mock 直接 SENT，WeCom 进入 CREATED 等待异步发送。</p>
+ * 渠道中立的入站消息参数，由 WeCom 等渠道构建并委托给 {@link com.lifeagent.service.ConversationService}。
  */
 @Value
 @Builder
 public class InboundMessageCommand {
 
-    /** 渠道标识，如 MOCK、WECOM */
+    /** 渠道标识，如 WECOM */
     String channel;
 
     /** 外部用户 ID */
