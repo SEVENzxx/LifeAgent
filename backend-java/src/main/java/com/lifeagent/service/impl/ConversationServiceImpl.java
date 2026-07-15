@@ -2,6 +2,7 @@ package com.lifeagent.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.lifeagent.common.BizException;
+import com.lifeagent.dto.InboundMessageCommand;
 import com.lifeagent.dto.InboundMessageRequest;
 import com.lifeagent.dto.InboundMessageResponse;
 import com.lifeagent.dto.OutboundMessageResponse;
@@ -28,9 +29,10 @@ import java.util.HexFormat;
 import java.util.List;
 
 /**
- * 会话服务实现，同步处理 Mock 消息的接收和回复。
+ * 会话服务实现，支持多渠道入站处理。
  *
  * <p>三表闭环：users、channel_bindings、conversation_messages。
+ * Mock 渠道 ASSISTANT 直接 SENT，真实渠道 ASSISTANT 进入 CREATED 等待异步发送。
  * 幂等由 idempotency_key 唯一约束保证，Redis 只做预检优化。</p>
  */
 @Slf4j
@@ -39,7 +41,7 @@ import java.util.List;
 public class ConversationServiceImpl implements ConversationService {
 
     private static final String FIXED_REPLY_TEXT = "收到，我已经记录这条消息。";
-    private static final String MOCK_CHANNEL = "MOCK";
+    static final String MOCK_CHANNEL = "MOCK";
 
     private final UserMapper userMapper;
     private final ChannelBindingMapper channelBindingMapper;
@@ -50,15 +52,28 @@ public class ConversationServiceImpl implements ConversationService {
     @Override
     @Transactional
     public InboundMessageResponse receiveInboundMessage(InboundMessageRequest request) {
-        String channel = MOCK_CHANNEL;
-        String externalUserId = request.getExternalUserId().trim();
-        String externalMessageId = request.getExternalMessageId().trim();
+        InboundMessageCommand command = InboundMessageCommand.builder()
+                .channel(MOCK_CHANNEL)
+                .externalUserId(request.getExternalUserId().trim())
+                .externalMessageId(request.getExternalMessageId().trim())
+                .text(request.getText().trim())
+                .sentAt(request.getSentAt())
+                .build();
+        return processInboundMessage(command);
+    }
+
+    @Override
+    @Transactional
+    public InboundMessageResponse processInboundMessage(InboundMessageCommand command) {
+        String channel = command.getChannel();
+        String externalUserId = command.getExternalUserId().trim();
+        String externalMessageId = command.getExternalMessageId().trim();
         String idempotencyKey = channel + ":" + externalMessageId;
-        String text = request.getText().trim();
+        String text = command.getText().trim();
         LocalDateTime now = LocalDateTime.now(clock);
 
         // 检查 sentAt 是否晚于服务器时间 10 分钟以上
-        OffsetDateTime sentAt = request.getSentAt();
+        OffsetDateTime sentAt = command.getSentAt();
         if (sentAt != null) {
             OffsetDateTime serverNow = OffsetDateTime.now(clock);
             if (sentAt.isAfter(serverNow.plusMinutes(10))) {
@@ -94,7 +109,10 @@ public class ConversationServiceImpl implements ConversationService {
         userMsg.setRole(MessageRole.USER.name());
         userMsg.setContent(text);
         userMsg.setContentHash(hashContent(text));
-        userMsg.setDeliveryStatus(DeliveryStatus.PENDING.name());
+        userMsg.setDeliveryStatus(DeliveryStatus.CREATED.name());
+        if (sentAt != null) {
+            userMsg.setSentAt(sentAt.toLocalDateTime());
+        }
 
         int rows = conversationMessageMapper.insertIgnore(userMsg);
         if (rows == 0) {
@@ -113,18 +131,27 @@ public class ConversationServiceImpl implements ConversationService {
             return new InboundMessageResponse(true, true, existing.getId(), reply);
         }
 
-        // 保存 ASSISTANT 消息，直接标记 SENT（无外部发送副作用）
+        // 保存 ASSISTANT 消息，根据渠道决定投递方式
         ConversationMessageEntity assistantMsg = new ConversationMessageEntity();
         assistantMsg.setChannelBindingId(binding.getId());
         assistantMsg.setIdempotencyKey(idempotencyKey);
         assistantMsg.setRole(MessageRole.ASSISTANT.name());
         assistantMsg.setContent(FIXED_REPLY_TEXT);
         assistantMsg.setContentHash(hashContent(FIXED_REPLY_TEXT));
-        assistantMsg.setDeliveryStatus(DeliveryStatus.SENT.name());
-        conversationMessageMapper.insert(assistantMsg);
 
-        log.info("入站消息同步处理完成, messageId={}, idempotencyKey={}",
-                userMsg.getId(), idempotencyKey);
+        if (MOCK_CHANNEL.equals(channel)) {
+            // Mock 渠道：同步回复，直接标记 SENT（无外部发送副作用）
+            assistantMsg.setDeliveryStatus(DeliveryStatus.SENT.name());
+            assistantMsg.setSentAt(now);
+            conversationMessageMapper.insert(assistantMsg);
+        } else {
+            // 真实渠道：标记 CREATED，由调用方在事务提交后触发异步发送
+            assistantMsg.setDeliveryStatus(DeliveryStatus.CREATED.name());
+            conversationMessageMapper.insert(assistantMsg);
+        }
+
+        log.info("入站消息处理完成, channel={}, messageId={}, idempotencyKey={}",
+                channel, userMsg.getId(), idempotencyKey);
 
         return new InboundMessageResponse(true, false, userMsg.getId(), FIXED_REPLY_TEXT);
     }

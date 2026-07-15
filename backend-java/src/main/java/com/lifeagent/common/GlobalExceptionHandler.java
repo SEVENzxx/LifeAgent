@@ -7,6 +7,7 @@ import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 /**
  * 统一将业务异常、参数异常和未知异常转换为标准 API 响应。
@@ -46,6 +47,16 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ApiResponse<Void>> handleHttpMessageNotReadable(HttpMessageNotReadableException exception) {
         log.warn("请求消息不可读, message={}", exception.getMessage());
         return ResponseEntity.badRequest().body(ApiResponse.fail("请求参数不合法"));
+    }
+
+    /**
+     * Controller 条件关闭（如 Mock、WeCom）或路径不存在时返回 404。
+     */
+    @ExceptionHandler(NoResourceFoundException.class)
+    public ResponseEntity<ApiResponse<Void>> handleNoResourceFound(NoResourceFoundException exception) {
+        log.warn("请求路径未找到, method={}, path={}", exception.getHttpMethod(), exception.getResourcePath());
+        return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                .body(ApiResponse.fail("接口不存在"));
     }
 
     /**

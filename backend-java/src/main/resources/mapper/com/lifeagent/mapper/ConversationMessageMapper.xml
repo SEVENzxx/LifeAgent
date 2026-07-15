@@ -4,11 +4,22 @@
         "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.lifeagent.mapper.ConversationMessageMapper">
 
+    <!-- USER 消息幂等插入（ON CONFLICT DO NOTHING） -->
     <insert id="insertIgnore" useGeneratedKeys="true" keyProperty="id">
         INSERT INTO conversation_messages
-            (channel_binding_id, idempotency_key, external_message_id, role, content, content_hash, delivery_status)
-        VALUES (#{channelBindingId}, #{idempotencyKey}, #{externalMessageId}, #{role}, #{content}, #{contentHash}, #{deliveryStatus})
+            (channel_binding_id, idempotency_key, external_message_id, role,
+             content, content_hash, delivery_status, sent_at)
+        VALUES (#{channelBindingId}, #{idempotencyKey}, #{externalMessageId}, #{role},
+                #{content}, #{contentHash}, #{deliveryStatus}, #{sentAt})
         ON CONFLICT (idempotency_key) WHERE role = 'USER' DO NOTHING
     </insert>
+
+    <!-- 更新 ASSISTANT 投递状态和发送时间 -->
+    <update id="updateDeliveryStatus">
+        UPDATE conversation_messages
+        SET delivery_status = #{deliveryStatus},
+            sent_at = #{sentAt}
+        WHERE id = #{id} AND role = 'ASSISTANT'
+    </update>
 
 </mapper>

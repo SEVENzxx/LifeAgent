@@ -23,7 +23,7 @@ public class ConversationMessageEntity {
     private Long channelBindingId;
 
     /**
-     * 全局幂等键 = channel + ":" + externalMessageId，USER 消息唯一
+     * 全局幂等键 = channel + ":" + externalMessageId，USER/ASSISTANT 各自唯一
      */
     private String idempotencyKey;
 
@@ -48,9 +48,14 @@ public class ConversationMessageEntity {
     private String contentHash;
 
     /**
-     * 投递状态：PENDING、SENT
+     * 投递状态
      */
     private String deliveryStatus;
+
+    /**
+     * 消息发送时间：USER 来自渠道声明，ASSISTANT 只在渠道确认成功后写入
+     */
+    private LocalDateTime sentAt;
 
     private LocalDateTime createdAt;
 }

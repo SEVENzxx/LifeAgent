@@ -1,4 +1,6 @@
 spring:
+  profiles:
+    active: local
   application:
     name: lifeagent-java
   datasource:
@@ -52,6 +54,14 @@ management:
 lifeagent:
   mock-channel:
     enabled: ${MOCK_CHANNEL_ENABLED:false}
+  wecom:
+    enabled: ${WECOM_CHANNEL_ENABLED:false}
+    corp-id: ${WECOM_CORP_ID:}
+    agent-id: ${WECOM_AGENT_ID:}
+    callback-token: ${WECOM_CALLBACK_TOKEN:}
+    encoding-aes-key: ${WECOM_ENCODING_AES_KEY:}
+    corp-secret: ${WECOM_CORP_SECRET:}
+    api-base-url: ${WECOM_API_BASE_URL:https://qyapi.weixin.qq.com}
 
 logging:
   pattern:

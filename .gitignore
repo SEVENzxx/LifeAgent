@@ -2,6 +2,7 @@
 .env
 .env.local
 *.local.*
+**/application-local.yml
 
 # === IDE / 编辑器 ===
 .idea/

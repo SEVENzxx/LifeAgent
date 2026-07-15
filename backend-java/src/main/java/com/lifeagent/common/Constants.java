@@ -25,6 +25,17 @@ public final class Constants {
     public static final String MIN_CONFIDENCE_VALUE = "0.0";
     public static final String MAX_CONFIDENCE_VALUE = "1.0";
 
+    // ========== 企业微信 ==========
+
+    /** 回调 URL 验证 / 消息接收允许的最大时间戳偏差（秒） */
+    public static final long WECOM_MAX_TIMESTAMP_DRIFT_SECONDS = 300;
+
+    /** POST 回调请求体上限（字节） */
+    public static final int WECOM_MAX_BODY_SIZE = 64 * 1024;
+
+    /** WeCom 渠道标识 */
+    public static final String CHANNEL_WECOM = "WECOM";
+
     private Constants() {
     }
 }

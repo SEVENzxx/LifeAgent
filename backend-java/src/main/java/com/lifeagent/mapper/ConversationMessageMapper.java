@@ -2,6 +2,9 @@ package com.lifeagent.mapper;
 
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.lifeagent.entity.ConversationMessageEntity;
+import org.apache.ibatis.annotations.Param;
+
+import java.time.LocalDateTime;
 
 public interface ConversationMessageMapper extends BaseMapper<ConversationMessageEntity> {
 
@@ -11,4 +14,16 @@ public interface ConversationMessageMapper extends BaseMapper<ConversationMessag
      * SQL 定义在 ConversationMessageMapper.xml。
      */
     int insertIgnore(ConversationMessageEntity entity);
+
+    /**
+     * 更新 ASSISTANT 投递状态和发送时间。
+     *
+     * @param id             ASSISTANT 消息 ID
+     * @param deliveryStatus 新状态（SENT/FAILED）
+     * @param sentAt         发送成功时间，失败时为 null
+     * @return 影响行数
+     */
+    int updateDeliveryStatus(@Param("id") Long id,
+                             @Param("deliveryStatus") String deliveryStatus,
+                             @Param("sentAt") LocalDateTime sentAt);
 }

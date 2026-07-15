@@ -1,13 +1,14 @@
 package com.lifeagent.enums;
 
 /**
- * 消息投递状态。
+ * 消息状态。
  *
- * <p>PENDING：等待投递；SENT：已成功发送。</p>
+ * <p>USER 始终为 CREATED（已收到）；ASSISTANT 从 CREATED 流转到 SENT/FAILED。</p>
  */
 public enum DeliveryStatus {
-    PENDING("等待投递"),
-    SENT("已发送");
+    CREATED("已创建"),
+    SENT("已成功发送"),
+    FAILED("发送失败");
 
     private final String description;
 
