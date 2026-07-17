@@ -54,6 +54,7 @@ class OpenAICompatProvider(ModelProvider):
                 headers=headers,
                 timeout=self._settings.request_timeout_seconds,
                 transport=self._transport,
+                trust_env=self._settings.openai_compat_trust_env,
             ) as client:
                 response = await client.post(
                     "chat/completions",

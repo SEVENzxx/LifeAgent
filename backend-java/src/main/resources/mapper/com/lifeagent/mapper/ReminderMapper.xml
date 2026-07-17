@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.lifeagent.mapper.ReminderMapper">
+
+    <!-- 幂等插入（ON CONFLICT DO NOTHING） -->
+    <insert id="insertIgnore" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO reminders
+            (user_id, content, event_at, timezone, status,
+             source_message_id, version, created_at, updated_at)
+        VALUES (#{userId}, #{content}, #{eventAt}, #{timezone}, #{status},
+                #{sourceMessageId}, 1, #{createdAt}, #{updatedAt})
+        ON CONFLICT (source_message_id) DO NOTHING
+    </insert>
+
+    <!-- 乐观锁条件更新状态 -->
+    <update id="updateStatusWithVersion">
+        UPDATE reminders
+        SET status = #{newStatus},
+            version = #{version} + 1,
+            updated_at = #{now}
+        WHERE id = #{id}
+          AND status = #{oldStatus}
+          AND version = #{version}
+    </update>
+
+    <!-- 查询用户最近一条有效 Reminder -->
+    <select id="selectRecentByUserId" resultType="com.lifeagent.entity.ReminderEntity">
+        SELECT *
+        FROM reminders
+        WHERE user_id = #{userId}
+          AND status IN ('ACTIVE', 'ACKNOWLEDGED', 'DELIVERED')
+        ORDER BY updated_at DESC
+        LIMIT 1
+    </select>
+
+    <!-- 按 source_message_id 查询 -->
+    <select id="selectBySourceMessage" resultType="com.lifeagent.entity.ReminderEntity">
+        SELECT *
+        FROM reminders
+        WHERE source_message_id = #{sourceMessageId}
+        LIMIT 1
+    </select>
+
+    <!-- 查询用户未完成的定时提醒 -->
+    <select id="selectActiveByUserId" resultType="com.lifeagent.entity.ReminderEntity">
+        SELECT *
+        FROM reminders
+        WHERE user_id = #{userId}
+          AND status IN ('ACTIVE', 'DELIVERED', 'ACKNOWLEDGED')
+        ORDER BY id DESC
+    </select>
+
+</mapper>

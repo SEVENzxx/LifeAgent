@@ -9,6 +9,9 @@ from lifeagent_ai.schemas.model_api import (
 from lifeagent_ai.schemas.turn_resolution import (
     ContextMessageItem,
     ContextPackage,
+    PendingReminderInfo,
+    RecentReminderInfo,
+    ReminderResolution,
     TurnResolutionRequest,
     TurnResolutionResponse,
 )
@@ -22,6 +25,9 @@ __all__ = [
     "ContextMessageItem",
     "ContextPackage",
     "HealthResponse",
+    "PendingReminderInfo",
+    "RecentReminderInfo",
+    "ReminderResolution",
     "TurnResolutionRequest",
     "TurnResolutionResponse",
 ]

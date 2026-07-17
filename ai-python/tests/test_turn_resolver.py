@@ -6,10 +6,12 @@ import pytest
 from pydantic import ValidationError
 
 from lifeagent_ai.config import (
+    ENV_OPENAI_COMPAT_TRUST_ENV,
     INTENT_SMALL_TALK,
     RESOLUTION_AI_UNAVAILABLE,
     RESOLUTION_RESOLVED,
     Settings,
+    get_settings,
 )
 from lifeagent_ai.providers.base import ModelInvokeError, ModelProvider
 from lifeagent_ai.providers.openai_compat import OpenAICompatProvider
@@ -42,9 +44,27 @@ def create_openai_compat_settings() -> Settings:
         openai_compat_api_key="test-key",
         openai_compat_base_url="https://example.test/v1",
         openai_compat_model="qwen-turbo",
+        openai_compat_trust_env=False,
         internal_service_token="test-token",
         request_timeout_seconds=0.1,
     )
+
+
+@pytest.mark.parametrize(
+    ("raw_value", "expected"),
+    [("true", True), ("1", True), ("false", False), ("invalid", False)],
+)
+def test_should_parse_environment_proxy_setting(
+    monkeypatch: pytest.MonkeyPatch,
+    raw_value: str,
+    expected: bool,
+) -> None:
+    monkeypatch.setenv(ENV_OPENAI_COMPAT_TRUST_ENV, raw_value)
+    get_settings.cache_clear()
+    try:
+        assert get_settings().openai_compat_trust_env is expected
+    finally:
+        get_settings.cache_clear()
 
 
 class LowConfidenceProvider(ModelProvider):
@@ -118,6 +138,52 @@ def test_should_fallback_to_unavailable_when_provider_times_out() -> None:
     assert response.intent == INTENT_SMALL_TALK
     assert response.confidence == 0.0
     assert response.reply_draft is None
+
+
+def test_should_forward_environment_proxy_setting_to_http_client(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured_options: dict[str, object] = {}
+    valid_resolution = {
+        "request_id": "test-request",
+        "schema_version": "1",
+        "resolution_status": "RESOLVED",
+        "intent": "SMALL_TALK",
+        "confidence": 0.9,
+        "reply_draft": "你好",
+        "updated_summary": None,
+    }
+    valid_content = json.dumps(valid_resolution)
+
+    class RecordingAsyncClient:
+        def __init__(self, **options: object) -> None:
+            captured_options.update(options)
+
+        async def __aenter__(self) -> "RecordingAsyncClient":
+            return self
+
+        async def __aexit__(self, *args: object) -> None:
+            return None
+
+        async def post(self, path: str, json: object) -> httpx.Response:
+            request = httpx.Request("POST", f"https://example.test/v1/{path}")
+            return httpx.Response(
+                status_code=200,
+                json={
+                    "choices": [
+                        {"message": {"content": valid_content}}
+                    ]
+                },
+                request=request,
+            )
+
+    monkeypatch.setattr(httpx, "AsyncClient", RecordingAsyncClient)
+    provider = OpenAICompatProvider(create_openai_compat_settings())
+
+    response = asyncio.run(provider.resolve_turn(create_request()))
+
+    assert response.resolution_status == RESOLUTION_RESOLVED
+    assert captured_options["trust_env"] is False
 
 
 def test_should_reject_invalid_llm_output_before_service_receives_it() -> None:
@@ -237,4 +303,101 @@ def test_should_reject_unknown_resolution_status() -> None:
             confidence=0.0,
             reply_draft=None,
             updated_summary=None,
+        )
+
+
+# ========== LA-005 提醒字段测试 ==========
+
+
+def test_should_accept_reminder_resolution_in_response() -> None:
+    """REMINDER_CREATE 意图可以包含 reminder_resolution。"""
+    response = TurnResolutionResponse(
+        request_id="test",
+        schema_version="1",
+        resolution_status=RESOLUTION_RESOLVED,
+        intent="REMINDER_CREATE",
+        confidence=0.9,
+        reply_draft="已设置提醒",
+        updated_summary=None,
+        reminder_resolution={
+            "target": "NEW",
+            "action": "CREATE",
+            "content": "参加面试",
+            "event_at": None,
+            "remind_at": "2026-07-18T15:00:00+08:00",
+            "advance_remind_at": None,
+            "time_source": "USER_EXPLICIT",
+            "missing_fields": [],
+        },
+    )
+    assert response.reminder_resolution is not None
+    assert response.reminder_resolution.target == "NEW"
+    assert response.reminder_resolution.action == "CREATE"
+    assert response.reminder_resolution.content == "参加面试"
+
+
+def test_should_reject_reminder_resolution_for_non_reminder_intent() -> None:
+    """非 REMINDER_CREATE 意图时不允许包含 reminder_resolution。"""
+    with pytest.raises(ValidationError, match="非 REMINDER_CREATE 意图"):
+        TurnResolutionResponse(
+            request_id="test",
+            schema_version="1",
+            resolution_status=RESOLUTION_RESOLVED,
+            intent=INTENT_SMALL_TALK,
+            confidence=0.9,
+            reply_draft="你好",
+            updated_summary=None,
+            reminder_resolution={
+                "target": "NEW",
+                "action": "CREATE",
+                "content": "test",
+                "time_source": "USER_EXPLICIT",
+                "missing_fields": [],
+            },
+        )
+
+
+def test_should_accept_context_package_with_reminder_fields() -> None:
+    """ContextPackage 可以包含 reminder 上下文。"""
+    context = ContextPackage(
+        current_message="提醒我明天面试",
+        memory_summary=None,
+        recent_messages=[],
+        summary_requested=False,
+        summary_messages=[],
+        reference_time="2026-07-17T12:00:00+08:00",
+        timezone="Asia/Shanghai",
+        pending_reminder={
+            "draft_token": "draft-1",
+            "content": "面试",
+            "time_source": "AI_SUGGESTED",
+            "draft_status": "AWAITING_CONFIRMATION",
+        },
+        recent_reminder=None,
+    )
+    assert context.reference_time == "2026-07-17T12:00:00+08:00"
+    assert context.timezone == "Asia/Shanghai"
+    assert context.pending_reminder is not None
+    assert context.pending_reminder.draft_token == "draft-1"
+    assert context.recent_reminder is None
+
+
+def test_should_reject_reminder_resolution_with_unknown_target() -> None:
+    """非法 target 应被拒绝。"""
+    with pytest.raises(ValidationError):
+        TurnResolutionResponse(
+            request_id="test",
+            schema_version="1",
+            resolution_status=RESOLUTION_RESOLVED,
+            intent="REMINDER_CREATE",
+            confidence=0.9,
+            reply_draft="test",
+            updated_summary=None,
+            reminder_resolution={
+                "target": "INVALID",
+                "action": "CREATE",
+                "content": "test",
+                "time_source": "USER_EXPLICIT",
+                "missing_fields": [],
+            },
         )

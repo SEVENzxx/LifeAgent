@@ -228,7 +228,10 @@ public class WeComCallbackService {
                 Long userId = response.getUserId();
                 Long bindingId = response.getBindingId();
                 String externalUserId = textMsg.fromUserName();
-                aiTaskExecutor.submit(() -> replyService.processAsync(userId, bindingId, idempotencyKey, externalUserId, currentMessage));
+                Long sourceMessageId = response.getMessageId();
+                aiTaskExecutor.submit(() -> replyService.processAsync(
+                        userId, bindingId, idempotencyKey, externalUserId,
+                        currentMessage, sourceMessageId));
             }
         } catch (DataIntegrityViolationException e) {
             log.error("POST 回调数据库完整性错误, msgId={}", textMsg.msgId(), e);

@@ -2,10 +2,8 @@ package com.lifeagent.dto;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.lifeagent.dto.turn.ContextMessageItem;
-import com.lifeagent.dto.turn.ContextPackage;
-import com.lifeagent.dto.turn.TurnResolutionRequest;
-import com.lifeagent.dto.turn.TurnResolutionResponse;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+import com.lifeagent.dto.turn.*;
 import jakarta.validation.Validation;
 import jakarta.validation.Validator;
 import org.junit.jupiter.api.Test;
@@ -17,7 +15,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 class TurnResolutionProtocolTest {
 
-    private final ObjectMapper objectMapper = new ObjectMapper();
+    private final ObjectMapper objectMapper = new ObjectMapper()
+            .registerModule(new JavaTimeModule());
     private final Validator validator = Validation.buildDefaultValidatorFactory().getValidator();
 
     @Test
@@ -154,5 +153,90 @@ class TurnResolutionProtocolTest {
         assertThat(deserialized.getMessageId()).isEqualTo(42);
         assertThat(deserialized.getRole()).isEqualTo("USER");
         assertThat(deserialized.getContent()).isEqualTo("你好");
+    }
+
+    // ========== LA-005 提醒上下文 ==========
+
+    @Test
+    void shouldSerializeContextPackageWithReminderFields() throws Exception {
+        ContextPackage context = ContextPackage.builder()
+                .currentMessage("提醒我明天面试")
+                .memorySummary(null)
+                .recentMessages(List.of())
+                .summaryRequested(false)
+                .summaryMessages(List.of())
+                .referenceTime("2026-07-17T12:00:00+08:00")
+                .timezone("Asia/Shanghai")
+                .pendingReminder(PendingReminderInfo.builder()
+                        .draftToken("draft-1")
+                        .content("面试")
+                        .timeSource("AI_SUGGESTED")
+                        .draftStatus("AWAITING_CONFIRMATION")
+                        .build())
+                .recentReminder(null)
+                .build();
+
+        JsonNode json = objectMapper.readTree(objectMapper.writeValueAsString(context));
+
+        assertThat(json.get("reference_time").asText()).isEqualTo("2026-07-17T12:00:00+08:00");
+        assertThat(json.get("timezone").asText()).isEqualTo("Asia/Shanghai");
+        assertThat(json.get("pending_reminder").get("draft_token").asText()).isEqualTo("draft-1");
+        assertThat(json.get("recent_reminder").isNull()).isTrue();
+    }
+
+    @Test
+    void shouldDeserializeResponseWithReminderResolution() throws Exception {
+        String json = """
+                {
+                  "request_id": "request-1",
+                  "schema_version": "1",
+                  "resolution_status": "RESOLVED",
+                  "intent": "REMINDER_CREATE",
+                  "confidence": 0.9,
+                  "reply_draft": "已设置提醒",
+                  "updated_summary": null,
+                  "reminder_resolution": {
+                    "target": "NEW",
+                    "action": "CREATE",
+                    "content": "参加面试",
+                    "event_at": null,
+                    "remind_at": "2026-07-18T15:00:00+08:00",
+                    "advance_remind_at": null,
+                    "time_source": "USER_EXPLICIT",
+                    "missing_fields": []
+                  }
+                }
+                """;
+
+        TurnResolutionResponse response = objectMapper.readValue(json, TurnResolutionResponse.class);
+
+        assertThat(response.getIntent()).isEqualTo("REMINDER_CREATE");
+        assertThat(response.getReminderResolution()).isNotNull();
+        assertThat(response.getReminderResolution().getTarget()).isEqualTo("NEW");
+        assertThat(response.getReminderResolution().getAction()).isEqualTo("CREATE");
+        assertThat(response.getReminderResolution().getContent()).isEqualTo("参加面试");
+        assertThat(response.getReminderResolution().getTimeSource()).isEqualTo("USER_EXPLICIT");
+        assertThat(response.getReminderResolution().getRemindAt()).isNotNull();
+    }
+
+    @Test
+    void shouldDeserializeResponseWithoutReminderResolution() throws Exception {
+        String json = """
+                {
+                  "request_id": "request-1",
+                  "schema_version": "1",
+                  "resolution_status": "RESOLVED",
+                  "intent": "SMALL_TALK",
+                  "confidence": 0.95,
+                  "reply_draft": "你好！",
+                  "updated_summary": null,
+                  "reminder_resolution": null
+                }
+                """;
+
+        TurnResolutionResponse response = objectMapper.readValue(json, TurnResolutionResponse.class);
+
+        assertThat(response.getIntent()).isEqualTo("SMALL_TALK");
+        assertThat(response.getReminderResolution()).isNull();
     }
 }

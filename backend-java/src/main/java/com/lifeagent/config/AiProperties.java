@@ -42,4 +42,30 @@ public class AiProperties {
 
     /** 上下文缓存 TTL（秒） */
     private long contextCacheTtlSeconds = Constants.CONTEXT_CACHE_TTL_SECONDS;
+
+    // ========== LA-005 提醒 & 调度 ==========
+
+    /** 提醒扫描间隔（毫秒） */
+    private long reminderScanIntervalMs = Constants.REMINDER_SCAN_INTERVAL_MS;
+
+    /** Job 每批最大领取数 */
+    private int reminderJobBatchSize = Constants.REMINDER_JOB_BATCH_SIZE;
+
+    /** Job 租约时长（秒） */
+    private long reminderJobLeaseSeconds = Constants.REMINDER_JOB_LEASE_SECONDS;
+
+    /** 最大重试次数 */
+    private int reminderMaxRetries = Constants.REMINDER_MAX_RETRIES;
+
+    /** 重试延迟（逗号分隔） */
+    private String reminderRetryDelaysMinutes = "1m,5m,15m";
+
+    /** 超过宽限时间（分钟） */
+    private long reminderLateGraceMinutes = Constants.REMINDER_LATE_GRACE_MINUTES;
+
+    /** Redis 候选 TTL（分钟） */
+    private long reminderDraftTtlMinutes = Constants.REMINDER_DRAFT_TTL_MINUTES;
+
+    /** 提醒写入最低置信度 */
+    private double reminderWriteMinConfidence = Constants.REMINDER_WRITE_MIN_CONFIDENCE;
 }

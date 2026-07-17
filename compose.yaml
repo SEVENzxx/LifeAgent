@@ -57,6 +57,7 @@ services:
       OPENAI_COMPAT_API_KEY: ${OPENAI_COMPAT_API_KEY:-}
       OPENAI_COMPAT_BASE_URL: ${OPENAI_COMPAT_BASE_URL:-https://dashscope.aliyuncs.com/compatible-mode/v1}
       OPENAI_COMPAT_MODEL: ${OPENAI_COMPAT_MODEL:-qwen-turbo}
+      OPENAI_COMPAT_TRUST_ENV: ${OPENAI_COMPAT_TRUST_ENV:-false}
       INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN:-lifeagent-local-token}
     expose:
       - "8000"

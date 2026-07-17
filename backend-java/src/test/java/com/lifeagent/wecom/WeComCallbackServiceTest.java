@@ -375,7 +375,7 @@ class WeComCallbackServiceTest {
         sendEncryptedPost(innerXml);
 
         verify(replyService, timeout(5000)).processAsync(eq(1L), eq(1L),
-                eq("WECOM:12345"), eq("user001"), eq("你好"));
+                eq("WECOM:12345"), eq("user001"), eq("你好"), eq(1L));
     }
 
     @Test
@@ -397,7 +397,7 @@ class WeComCallbackServiceTest {
 
         sendEncryptedPost(innerXml);
 
-        verify(replyService, never()).processAsync(any(), any(), any(), any(), any());
+        verify(replyService, never()).processAsync(any(), any(), any(), any(), any(), any());
     }
 
     @Test
@@ -419,7 +419,7 @@ class WeComCallbackServiceTest {
 
         sendEncryptedPost(innerXml);
 
-        verify(replyService, never()).processAsync(any(), any(), any(), any(), any());
+        verify(replyService, never()).processAsync(any(), any(), any(), any(), any(), any());
     }
 
     // ==================== 辅助方法 ====================

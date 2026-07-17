@@ -2,6 +2,7 @@ package com.lifeagent.ai;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.json.JsonMapper;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.lifeagent.config.AiProperties;
 import com.lifeagent.dto.turn.TurnResolutionRequest;
 import com.lifeagent.dto.turn.TurnResolutionResponse;
@@ -39,7 +40,9 @@ public class AiApiClient {
                 .build();
         var factory = new org.springframework.http.client.JdkClientHttpRequestFactory(httpClient);
         this.restTemplate = new RestTemplate(factory);
-        this.objectMapper = JsonMapper.builder().build();
+        this.objectMapper = JsonMapper.builder()
+                .addModule(new JavaTimeModule())
+                .build();
     }
 
     /**
@@ -126,6 +129,7 @@ public class AiApiClient {
                 .confidence(0.0)
                 .replyDraft(null)
                 .updatedSummary(null)
+                .reminderResolution(null)
                 .build();
     }
 }

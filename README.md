@@ -27,6 +27,8 @@ docker compose up --build --wait
 
 使用真实模型前，把 `.env.example` 复制为 `.env`，将 `LLM_PROVIDER` 改为 `openai-compat` 并配置 `OPENAI_COMPAT_API_KEY`（阿里百炼等 OpenAI 兼容平台密钥）。
 
+模型请求默认不继承运行环境中的 `HTTP_PROXY`、`HTTPS_PROXY` 等代理配置，避免本机代理波动导致模型连接超时。如果目标模型必须通过环境代理访问，可将 `OPENAI_COMPAT_TRUST_ENV` 设置为 `true`。
+
 ## 本地测试
 
 Java 项目要求 JDK 17：

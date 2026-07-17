@@ -6,6 +6,7 @@ import lombok.Builder;
 import lombok.Value;
 import lombok.extern.jackson.Jacksonized;
 
+import java.time.Instant;
 import java.util.List;
 
 /**
@@ -31,4 +32,18 @@ public class ContextPackage {
 
     /** 触发摘要时才包含本批待摘要旧消息，否则为空 */
     List<ContextMessageItem> summaryMessages;
+
+    // ========== LA-005 提醒上下文 ==========
+
+    /** Java 当前带偏移 ISO 8601 时间 */
+    String referenceTime;
+
+    /** 用户 IANA 时区 */
+    String timezone;
+
+    /** 最多一个未过期 Redis 候选，可空 */
+    PendingReminderInfo pendingReminder;
+
+    /** 最多一个最近明确 Reminder，可空 */
+    RecentReminderInfo recentReminder;
 }

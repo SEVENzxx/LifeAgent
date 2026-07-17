@@ -1,0 +1,110 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.lifeagent.mapper.ScheduledJobMapper">
+
+    <!-- 幂等插入 -->
+    <insert id="insertIgnore" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO scheduled_jobs
+            (job_type, business_key, reminder_id, node_type,
+             scheduled_at, next_run_at, status, retry_count,
+             created_at, updated_at)
+        VALUES (#{jobType}, #{businessKey}, #{reminderId}, #{nodeType},
+                #{scheduledAt}, #{nextRunAt}, 'READY', 0,
+                #{createdAt}, #{updatedAt})
+        ON CONFLICT (business_key) DO NOTHING
+    </insert>
+
+    <!-- 扫描可领取的 Job -->
+    <select id="scanDueJobs" resultType="com.lifeagent.entity.ScheduledJobEntity">
+        SELECT *
+        FROM scheduled_jobs
+        WHERE (status IN ('READY', 'RETRY_WAIT') AND next_run_at &lt;= #{now})
+           OR (status = 'RUNNING' AND lease_until IS NOT NULL AND lease_until &lt;= #{now})
+        ORDER BY next_run_at, id
+        LIMIT #{limit}
+        FOR UPDATE SKIP LOCKED
+    </select>
+
+    <!-- 领取 Job（条件更新） -->
+    <update id="acquireLease">
+        UPDATE scheduled_jobs
+        SET status = 'RUNNING',
+            lease_owner = #{owner},
+            lease_until = #{leaseUntil},
+            updated_at = #{now}
+        WHERE id = #{id}
+          AND (
+              (status IN ('READY', 'RETRY_WAIT') AND next_run_at &lt;= #{now})
+              OR (status = 'RUNNING' AND lease_until IS NOT NULL AND lease_until &lt;= #{now})
+          )
+    </update>
+
+    <!-- 标记成功 -->
+    <update id="markSucceeded">
+        UPDATE scheduled_jobs
+        SET status = 'SUCCEEDED',
+            assistant_message_id = #{assistantMessageId},
+            lease_owner = NULL,
+            lease_until = NULL,
+            updated_at = #{now}
+        WHERE id = #{id}
+    </update>
+
+    <!-- 标记重试等待 -->
+    <update id="markRetryWait">
+        UPDATE scheduled_jobs
+        SET status = 'RETRY_WAIT',
+            next_run_at = #{nextRunAt},
+            retry_count = retry_count + 1,
+            last_error_code = #{errorCode},
+            lease_owner = NULL,
+            lease_until = NULL,
+            updated_at = #{now}
+        WHERE id = #{id}
+    </update>
+
+    <!-- 标记失败 -->
+    <update id="markFailed">
+        UPDATE scheduled_jobs
+        SET status = 'FAILED',
+            last_error_code = #{errorCode},
+            lease_owner = NULL,
+            lease_until = NULL,
+            updated_at = #{now}
+        WHERE id = #{id}
+    </update>
+
+    <!-- 取消指定 Reminder 的所有未来 Job -->
+    <update id="cancelByReminder">
+        UPDATE scheduled_jobs
+        SET status = 'CANCELLED',
+            lease_owner = NULL,
+            lease_until = NULL,
+            updated_at = #{now}
+        WHERE reminder_id = #{reminderId}
+          AND status IN ('READY', 'RETRY_WAIT', 'RUNNING')
+    </update>
+
+    <!-- 标记超过宽限的 Job 为 MISSED -->
+    <update id="markMissed">
+        UPDATE scheduled_jobs
+        SET status = 'MISSED',
+            lease_owner = NULL,
+            lease_until = NULL,
+            updated_at = #{now}
+        WHERE status IN ('READY', 'RETRY_WAIT', 'RUNNING')
+          AND next_run_at &lt;= #{deadline}
+    </update>
+
+    <!-- 查询 Reminder 下的指定状态 Job -->
+    <select id="selectByReminderAndStatus" resultType="com.lifeagent.entity.ScheduledJobEntity">
+        SELECT *
+        FROM scheduled_jobs
+        WHERE reminder_id = #{reminderId}
+          AND status = #{status}
+        ORDER BY id
+    </select>
+
+</mapper>

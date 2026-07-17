@@ -71,6 +71,14 @@ lifeagent:
     summary-trigger-chars: ${CONTEXT_SUMMARY_TRIGGER_CHARS:8000}
     summary-max-chars: ${CONTEXT_SUMMARY_MAX_CHARS:1500}
     context-cache-ttl-seconds: ${CONTEXT_CACHE_TTL:86400}
+    reminder-scan-interval-ms: ${REMINDER_SCAN_INTERVAL_MS:5000}
+    reminder-job-batch-size: ${REMINDER_JOB_BATCH_SIZE:20}
+    reminder-job-lease-seconds: ${REMINDER_JOB_LEASE_SECONDS:60}
+    reminder-max-retries: ${REMINDER_MAX_RETRIES:3}
+    reminder-retry-delays-minutes: ${REMINDER_RETRY_DELAYS:1m,5m,15m}
+    reminder-late-grace-minutes: ${REMINDER_LATE_GRACE:30}
+    reminder-draft-ttl-minutes: ${REMINDER_DRAFT_TTL:30}
+    reminder-write-min-confidence: ${REMINDER_WRITE_MIN_CONFIDENCE:0.8}
 
 logging:
   pattern:

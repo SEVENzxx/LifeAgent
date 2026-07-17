@@ -83,8 +83,60 @@ public final class Constants {
     /** 最低置信度阈值 */
     public static final double MIN_CONFIDENCE = 0.6;
 
-    /** Redis key 前缀 */
+    /** Redis key 前缀：上下文缓存 */
     public static final String REDIS_CONTEXT_PREFIX = "lifeagent:conversation:context:";
+
+    /** Redis key 前缀：提醒候选 */
+    public static final String REDIS_REMINDER_DRAFT_PREFIX = "lifeagent:reminder:draft:";
+
+    // ========== LA-005 提醒 & 调度 ==========
+
+    /** 提醒扫描间隔（毫秒） */
+    public static final long REMINDER_SCAN_INTERVAL_MS = 5000;
+
+    /** Job 每批最大领取数 */
+    public static final int REMINDER_JOB_BATCH_SIZE = 20;
+
+    /** Job 租约时长（秒） */
+    public static final long REMINDER_JOB_LEASE_SECONDS = 60;
+
+    /** 最大重试次数 */
+    public static final int REMINDER_MAX_RETRIES = 3;
+
+    /** 重试延迟（分钟）：第 1 次、第 2 次、第 3 次 */
+    public static final long[] REMINDER_RETRY_DELAYS_MINUTES = {1, 5, 15};
+
+    /** 超过宽限时间（分钟）后标记为 MISSED */
+    public static final long REMINDER_LATE_GRACE_MINUTES = 30;
+
+    /** Redis 候选 TTL（分钟） */
+    public static final long REMINDER_DRAFT_TTL_MINUTES = 30;
+
+    /** 提醒写入最低置信度 */
+    public static final double REMINDER_WRITE_MIN_CONFIDENCE = 0.8;
+
+    /** 提醒 Power 文案前缀 */
+    public static final String REMINDER_MESSAGE_PREFIX = "提醒你：";
+
+    /** 提醒目标类型 */
+    public static final String DRAFT_TARGET_NEW = "NEW";
+    public static final String DRAFT_TARGET_PENDING_DRAFT = "PENDING_DRAFT";
+    public static final String DRAFT_TARGET_RECENT_REMINDER = "RECENT_REMINDER";
+
+    /** 提醒操作类型 */
+    public static final String DRAFT_ACTION_UPSERT_DRAFT = "UPSERT_DRAFT";
+    public static final String DRAFT_ACTION_CONFIRM_DRAFT = "CONFIRM_DRAFT";
+    public static final String DRAFT_ACTION_CREATE = "CREATE";
+    public static final String DRAFT_ACTION_MODIFY = "MODIFY";
+    public static final String DRAFT_ACTION_ACK = "ACK";
+    public static final String DRAFT_ACTION_COMPLETE = "COMPLETE";
+    public static final String DRAFT_ACTION_SNOOZE = "SNOOZE";
+    public static final String DRAFT_ACTION_CANCEL = "CANCEL";
+
+    /** 时间来源 */
+    public static final String TIME_SOURCE_USER_EXPLICIT = "USER_EXPLICIT";
+    public static final String TIME_SOURCE_AI_SUGGESTED = "AI_SUGGESTED";
+    public static final String TIME_SOURCE_NONE = "NONE";
 
     private Constants() {
     }

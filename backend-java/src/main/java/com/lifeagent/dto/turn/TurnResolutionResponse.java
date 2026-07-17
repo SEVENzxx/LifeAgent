@@ -35,4 +35,7 @@ public class TurnResolutionResponse {
 
     /** 仅摘要成功时返回，最长 1,500 */
     String updatedSummary;
+
+    /** LA-005 提醒候选解析结果，可空 */
+    ReminderResolution reminderResolution;
 }
