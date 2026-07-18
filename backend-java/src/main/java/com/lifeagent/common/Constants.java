@@ -89,6 +89,9 @@ public final class Constants {
     /** Redis key 前缀：提醒候选 */
     public static final String REDIS_REMINDER_DRAFT_PREFIX = "lifeagent:reminder:draft:";
 
+    /** Redis key 前缀：设备绑定缓存 */
+    public static final String REDIS_BEHAVIOR_DEVICE_BINDING_PREFIX = "lifeagent:behavior:device-binding:";
+
     // ========== LA-005 提醒 & 调度 ==========
 
     /** 提醒扫描间隔（毫秒） */
@@ -137,6 +140,56 @@ public final class Constants {
     public static final String TIME_SOURCE_USER_EXPLICIT = "USER_EXPLICIT";
     public static final String TIME_SOURCE_AI_SUGGESTED = "AI_SUGGESTED";
     public static final String TIME_SOURCE_NONE = "NONE";
+
+    // ========== LA-006 App 行为事件 ==========
+
+    /** 行为事件上传路径 */
+    public static final String BEHAVIOR_EVENT_PATH = "/api/v1/behavior-events";
+    public static final String BEHAVIOR_WINDOW_PATH = "/api/v1/behavior/activity-window";
+
+    /** 设备凭证请求头 */
+    public static final String HEADER_DEVICE_ID = "X-Device-Id";
+    public static final String HEADER_DEVICE_TOKEN = "X-Device-Token";
+
+    /** 事件类型 */
+    public static final String EVENT_TYPE_OPEN = "OPEN";
+    public static final String EVENT_TYPE_CLOSE = "CLOSE";
+
+    /** 区间质量 */
+    public static final String INTERVAL_QUALITY_EXACT = "EXACT";
+    public static final String INTERVAL_QUALITY_INFERRED_SWITCH = "INFERRED_SWITCH";
+    public static final String INTERVAL_QUALITY_OPEN = "OPEN";
+
+    /** 区间结束原因 */
+    public static final String END_REASON_EXPLICIT_CLOSE = "EXPLICIT_CLOSE";
+    public static final String END_REASON_APP_SWITCH = "APP_SWITCH";
+    public static final String END_REASON_STILL_OPEN = "STILL_OPEN";
+
+    /** 设备状态 */
+    public static final String DEVICE_STATUS_ACTIVE = "ACTIVE";
+    public static final String DEVICE_STATUS_REVOKED = "REVOKED";
+
+    /** 数据来源 */
+    public static final String SOURCE_TYPE_SHORTCUT = "SHORTCUT";
+
+    /** 事件结果 */
+    public static final String EVENT_RESULT_ACCEPTED = "ACCEPTED";
+    public static final String EVENT_RESULT_DUPLICATE = "DUPLICATE";
+
+    /** 窗口覆盖声明 */
+    public static final String COVERAGE_MONITORED_APPS_ONLY = "MONITORED_APPS_ONLY";
+
+    /** 窗口质量 */
+    public static final String WINDOW_QUALITY_SUFFICIENT = "SUFFICIENT";
+    public static final String WINDOW_QUALITY_PARTIAL = "PARTIAL";
+    public static final String WINDOW_QUALITY_INSUFFICIENT = "INSUFFICIENT";
+
+    /** 默认行为阈值 */
+    public static final long BEHAVIOR_MAX_FUTURE_SKEW_SECONDS = 300;       // 5 分钟
+    public static final long BEHAVIOR_MAX_PAST_AGE_SECONDS = 2_592_000;    // 30 天
+    public static final long BEHAVIOR_MAX_INTERVAL_SECONDS = 14_400;       // 4 小时
+    public static final long BEHAVIOR_QUERY_MAX_RANGE_SECONDS = 2_678_400; // 31 天
+    public static final int BEHAVIOR_QUERY_MAX_INTERVALS = 500;
 
     private Constants() {
     }

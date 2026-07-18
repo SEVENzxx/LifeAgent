@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.lifeagent.mapper.BehaviorEventMapper">
+
+    <insert id="insertIgnore" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO behavior_events
+            (device_binding_id, monitored_app_id, event_id, event_type,
+             event_time, received_at, client_version, payload_hash, created_at)
+        VALUES (#{deviceBindingId}, #{monitoredAppId}, #{eventId}, #{eventType},
+                #{eventTime}, #{receivedAt}, #{clientVersion}, #{payloadHash}, #{createdAt})
+        ON CONFLICT (device_binding_id, event_id) DO NOTHING
+    </insert>
+
+    <select id="selectByDeviceAndEventId" resultType="com.lifeagent.entity.BehaviorEventEntity">
+        SELECT *
+        FROM behavior_events
+        WHERE device_binding_id = #{deviceBindingId}
+          AND event_id = #{eventId}
+        LIMIT 1
+    </select>
+
+    <select id="selectByDeviceAndTimeRange" resultType="com.lifeagent.entity.BehaviorEventEntity">
+        SELECT *
+        FROM behavior_events
+        WHERE device_binding_id = #{deviceBindingId}
+          AND event_time >= #{fromTime}
+          AND event_time &lt;= #{toTime}
+        ORDER BY event_time ASC,
+                 CASE event_type WHEN 'CLOSE' THEN 0 WHEN 'OPEN' THEN 1 END ASC,
+                 received_at ASC,
+                 id ASC
+    </select>
+
+</mapper>

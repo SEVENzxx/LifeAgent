@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.lifeagent.mapper.MonitoredAppMapper">
+
+    <insert id="upsert">
+        INSERT INTO monitored_apps (user_id, app_key, display_name, first_seen_at, last_seen_at, created_at, updated_at)
+        VALUES (#{userId}, #{appKey}, #{displayName}, #{eventTime}, #{eventTime}, #{now}, #{now})
+        ON CONFLICT (user_id, app_key) DO UPDATE
+        SET display_name = EXCLUDED.display_name,
+            first_seen_at = LEAST(monitored_apps.first_seen_at, EXCLUDED.first_seen_at),
+            last_seen_at = GREATEST(monitored_apps.last_seen_at, EXCLUDED.last_seen_at),
+            updated_at = EXCLUDED.updated_at
+    </insert>
+
+    <select id="selectByUserId" resultType="com.lifeagent.entity.MonitoredAppEntity">
+        SELECT *
+        FROM monitored_apps
+        WHERE user_id = #{userId}
+        ORDER BY app_key
+    </select>
+
+    <select id="selectByUserAndKey" resultType="com.lifeagent.entity.MonitoredAppEntity">
+        SELECT *
+        FROM monitored_apps
+        WHERE user_id = #{userId}
+          AND app_key = #{appKey}
+        LIMIT 1
+    </select>
+
+</mapper>

@@ -1,12 +1,10 @@
 package com.lifeagent.ai;
 
-import com.lifeagent.common.Constants;
+import com.lifeagent.cache.ReminderDraftCache;
+import com.lifeagent.cache.model.ReminderDraftCacheValue;
 import com.lifeagent.config.AiProperties;
 import com.lifeagent.dto.turn.*;
-import com.lifeagent.entity.ChannelBindingEntity;
-import com.lifeagent.entity.ConversationContextEntity;
 import com.lifeagent.entity.ConversationMessageEntity;
-import com.lifeagent.entity.ReminderDraftEntity;
 import com.lifeagent.entity.ReminderEntity;
 import com.lifeagent.enums.DeliveryStatus;
 import com.lifeagent.enums.MessageRole;
@@ -14,7 +12,6 @@ import com.lifeagent.mapper.ChannelBindingMapper;
 import com.lifeagent.mapper.ConversationContextMapper;
 import com.lifeagent.mapper.ConversationMessageMapper;
 import com.lifeagent.service.ContextService;
-import com.lifeagent.service.ReminderDraftCache;
 import com.lifeagent.service.ReminderService;
 import com.lifeagent.wecom.WeComApiClient;
 import lombok.RequiredArgsConstructor;
@@ -22,12 +19,9 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 
-import java.math.BigDecimal;
 import java.time.Clock;
-import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
-import java.time.ZoneOffset;
 import java.util.List;
 import java.util.UUID;
 
@@ -151,7 +145,7 @@ public class ReplyService {
         String referenceTime = now.toString();
 
         // 查询 Redis 候选
-        PendingReminderInfo pendingInfo = reminderDraftCache.getAsInfo(userId);
+        PendingReminderInfo pendingInfo = getPendingReminderInfo(userId);
 
         // 查询最近 Reminder
         ReminderEntity recentReminder = reminderService.findRecentReminder(userId);
@@ -262,15 +256,33 @@ public class ReplyService {
         return REPLY_AI_FALLBACK;
     }
 
+    private PendingReminderInfo getPendingReminderInfo(Long userId) {
+        ReminderDraftCacheValue draft = reminderDraftCache.get(userId);
+        if (draft == null) {
+            return null;
+        }
+        return PendingReminderInfo.builder()
+                .draftToken(draft.getDraftToken())
+                .content(draft.getContent())
+                .eventAt(draft.getEventAt())
+                .remindAt(draft.getRemindAt())
+                .advanceRemindAt(draft.getAdvanceRemindAt())
+                .timeSource(draft.getTimeSource())
+                .draftStatus(draft.getDraftStatus())
+                .targetReminderId(draft.getTargetReminderId())
+                .targetReminderVersion(draft.getTargetReminderVersion())
+                .build();
+    }
+
     // ==================== 提醒候选操作 ====================
 
     private String handleUpsertDraft(Long userId, String idempotencyKey,
                                       ReminderResolution resolution, Long bindingId,
                                       String draft) {
-        ReminderDraftEntity draftEntity = reminderDraftCache.get(userId);
+        ReminderDraftCacheValue draftEntity = reminderDraftCache.get(userId);
         if (draftEntity == null) {
             // 新建候选
-            draftEntity = new ReminderDraftEntity();
+            draftEntity = new ReminderDraftCacheValue();
             draftEntity.setDraftToken(UUID.randomUUID().toString().replace("-", ""));
             draftEntity.setSourceMessageId(0L); // 候选阶段暂时无 sourceMessageId
             draftEntity.setContent(resolution.getContent());
@@ -316,7 +328,7 @@ public class ReplyService {
     private String handleConfirmDraft(Long userId, Long sourceMessageId,
                                        String idempotencyKey,
                                        ReminderResolution resolution, String draft) {
-        ReminderDraftEntity draftEntity = reminderDraftCache.get(userId);
+        ReminderDraftCacheValue draftEntity = reminderDraftCache.get(userId);
         if (draftEntity == null || draftEntity.getRemindAt() == null) {
             log.warn("Redis 候选不存在或过期，无法确认, userId={}", userId);
             if (draft != null && !draft.isBlank()) {

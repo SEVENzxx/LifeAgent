@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.lifeagent.mapper.ActivityIntervalMapper">
+
+    <select id="selectOverlapping" resultType="com.lifeagent.entity.ActivityIntervalEntity">
+        SELECT *
+        FROM activity_intervals
+        WHERE device_binding_id = #{deviceBindingId}
+          AND start_at &lt; #{toTime}
+          AND (end_at IS NULL OR end_at > #{fromTime})
+        ORDER BY start_at ASC, id ASC
+    </select>
+
+    <delete id="deleteOverlapping">
+        DELETE FROM activity_intervals
+        WHERE device_binding_id = #{deviceBindingId}
+          AND start_at &lt; #{toTime}
+          AND (end_at IS NULL OR end_at > #{fromTime})
+    </delete>
+
+    <select id="selectOpenByDevice" resultType="com.lifeagent.entity.ActivityIntervalEntity">
+        SELECT *
+        FROM activity_intervals
+        WHERE device_binding_id = #{deviceBindingId}
+          AND end_at IS NULL
+        LIMIT 1
+    </select>
+
+    <update id="truncateOpenIntervals">
+        UPDATE activity_intervals
+        SET end_at = #{maxInstant},
+            quality = 'TRUNCATED',
+            end_reason = 'MAX_DURATION',
+            updated_at = #{now}
+        WHERE device_binding_id = #{deviceBindingId}
+          AND end_at IS NULL
+          AND start_at &lt; #{maxInstant}
+    </update>
+
+    <insert id="batchInsert">
+        INSERT INTO activity_intervals
+            (device_binding_id, monitored_app_id, start_event_id, end_event_id,
+             start_at, end_at, quality, end_reason, created_at, updated_at)
+        VALUES
+        <foreach collection="list" item="item" separator=",">
+            (#{item.deviceBindingId}, #{item.monitoredAppId}, #{item.startEventId}, #{item.endEventId},
+             #{item.startAt}, #{item.endAt}, #{item.quality}, #{item.endReason}, #{item.createdAt}, #{item.updatedAt})
+        </foreach>
+    </insert>
+
+    <select id="selectByWindow" resultType="com.lifeagent.entity.ActivityIntervalEntity">
+        SELECT ai.*
+        FROM activity_intervals ai
+        LEFT JOIN monitored_apps ma ON ai.monitored_app_id = ma.id
+        WHERE ai.device_binding_id = #{deviceBindingId}
+          AND ai.start_at &lt; #{toTime}
+          AND (ai.end_at IS NULL OR ai.end_at > #{fromTime})
+          <if test="appKey != null and appKey != ''">
+              AND ma.app_key = #{appKey}
+          </if>
+        ORDER BY ai.start_at ASC, ai.id ASC
+        LIMIT #{limit}
+    </select>
+
+</mapper>

@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.lifeagent.mapper.DeviceBindingMapper">
+
+    <select id="selectByDeviceId" resultType="com.lifeagent.entity.DeviceBindingEntity">
+        SELECT *
+        FROM device_bindings
+        WHERE device_id = #{deviceId}
+        LIMIT 1
+    </select>
+
+    <update id="updateCredentialHash">
+        UPDATE device_bindings
+        SET credential_hash = #{credentialHash},
+            updated_at = #{now}
+        WHERE id = #{id}
+    </update>
+
+</mapper>

@@ -79,6 +79,12 @@ lifeagent:
     reminder-late-grace-minutes: ${REMINDER_LATE_GRACE:30}
     reminder-draft-ttl-minutes: ${REMINDER_DRAFT_TTL:30}
     reminder-write-min-confidence: ${REMINDER_WRITE_MIN_CONFIDENCE:0.8}
+  behavior:
+    max-future-skew-seconds: ${BEHAVIOR_MAX_FUTURE_SKEW:300}
+    max-past-age-seconds: ${BEHAVIOR_MAX_PAST_AGE:2592000}
+    max-interval-seconds: ${BEHAVIOR_MAX_INTERVAL:14400}
+    query-max-range-seconds: ${BEHAVIOR_QUERY_MAX_RANGE:2678400}
+    query-max-intervals: ${BEHAVIOR_QUERY_MAX_INTERVALS:500}
 
 logging:
   pattern:

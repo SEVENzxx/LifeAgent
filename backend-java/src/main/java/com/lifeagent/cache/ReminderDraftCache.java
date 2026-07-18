@@ -1,9 +1,8 @@
-package com.lifeagent.service;
+package com.lifeagent.cache;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.lifeagent.cache.model.ReminderDraftCacheValue;
 import com.lifeagent.config.AiProperties;
-import com.lifeagent.dto.turn.PendingReminderInfo;
-import com.lifeagent.entity.ReminderDraftEntity;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -35,10 +34,10 @@ public class ReminderDraftCache {
      * 保存候选到 Redis。
      *
      * @param userId 用户 ID
-     * @param draft  候选实体
+     * @param draft  候选值
      * @return true 表示写入成功
      */
-    public boolean save(Long userId, ReminderDraftEntity draft) {
+    public boolean save(Long userId, ReminderDraftCacheValue draft) {
         String key = buildKey(userId);
         try {
             String json = objectMapper.writeValueAsString(draft);
@@ -55,41 +54,20 @@ public class ReminderDraftCache {
     /**
      * 读取用户的 Redis 候选。
      *
-     * @return 候选实体，不存在或已过期时返回 null
+     * @return 候选值，不存在或已过期时返回 null
      */
-    public ReminderDraftEntity get(Long userId) {
+    public ReminderDraftCacheValue get(Long userId) {
         String key = buildKey(userId);
         try {
             String json = stringRedisTemplate.opsForValue().get(key);
             if (json == null || json.isBlank()) {
                 return null;
             }
-            return objectMapper.readValue(json, ReminderDraftEntity.class);
+            return objectMapper.readValue(json, ReminderDraftCacheValue.class);
         } catch (Exception e) {
             log.warn("提醒候选读取失败, userId={}", userId);
             return null;
         }
-    }
-
-    /**
-     * 读取并转换为请求上下文中的 PendingReminderInfo。
-     */
-    public PendingReminderInfo getAsInfo(Long userId) {
-        ReminderDraftEntity draft = get(userId);
-        if (draft == null) {
-            return null;
-        }
-        return PendingReminderInfo.builder()
-                .draftToken(draft.getDraftToken())
-                .content(draft.getContent())
-                .eventAt(draft.getEventAt())
-                .remindAt(draft.getRemindAt())
-                .advanceRemindAt(draft.getAdvanceRemindAt())
-                .timeSource(draft.getTimeSource())
-                .draftStatus(draft.getDraftStatus())
-                .targetReminderId(draft.getTargetReminderId())
-                .targetReminderVersion(draft.getTargetReminderVersion())
-                .build();
     }
 
     /**
@@ -111,7 +89,7 @@ public class ReminderDraftCache {
     public boolean deleteIfTokenMatches(Long userId, String expectedToken) {
         String key = buildKey(userId);
         try {
-            ReminderDraftEntity current = get(userId);
+            ReminderDraftCacheValue current = get(userId);
             if (current != null && current.getDraftToken().equals(expectedToken)) {
                 stringRedisTemplate.delete(key);
                 log.info("提醒候选已删除, userId={}, draftToken={}", userId, expectedToken);

@@ -1,6 +1,5 @@
 package com.lifeagent.controller;
 
-import com.lifeagent.common.ResponseHelper;
 import com.lifeagent.dto.WeComCallbackParams;
 import com.lifeagent.wecom.WeComCallbackResult;
 import com.lifeagent.wecom.WeComCallbackService;
@@ -37,7 +36,7 @@ public class WeComController {
             @RequestParam @Parameter(description = "加密的 echostr，Web 框架已解码一次，禁止二次 URL decode") String echostr
     ) {
         WeComCallbackResult result = callbackService.verifyUrl(params, echostr);
-        return ResponseHelper.toResponse(result.getHttpStatus(), result.getBody());
+        return ResponseEntity.status(result.getHttpStatus()).body(result.getBody());
     }
 
     @Operation(summary = "接收消息回调", description = "接收企业微信推送的用户文本消息，幂等持久化后返回 success")
@@ -47,6 +46,6 @@ public class WeComController {
             @RequestBody @Parameter(description = "加密 XML 消息体") String body
     ) {
         WeComCallbackResult result = callbackService.receiveMessage(params, body);
-        return ResponseHelper.toResponse(result.getHttpStatus(), result.getBody());
+        return ResponseEntity.status(result.getHttpStatus()).body(result.getBody());
     }
 }

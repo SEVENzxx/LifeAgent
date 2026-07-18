@@ -1,5 +1,6 @@
-package com.lifeagent.common;
+package com.lifeagent.common.web;
 
+import com.lifeagent.common.Constants;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -58,7 +59,6 @@ public class TraceIdFilter extends OncePerRequestFilter {
     }
 
     private String resolveTraceId(String candidate) {
-        // 限制外部 traceId 的字符和长度，避免换行符等内容污染日志。
         if (candidate != null && SAFE_TRACE_ID.matcher(candidate).matches()) {
             return candidate;
         }
@@ -66,7 +66,6 @@ public class TraceIdFilter extends OncePerRequestFilter {
     }
 
     private boolean shouldLogRequest(String requestUri) {
-        // 健康探针频率较高，不记录业务日志，避免监控流量淹没关键链路。
         return !requestUri.startsWith(Constants.ACTUATOR_HEALTH_PATH);
     }
 }

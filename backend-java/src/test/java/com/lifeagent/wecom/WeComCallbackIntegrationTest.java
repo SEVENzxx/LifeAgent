@@ -1,14 +1,21 @@
 package com.lifeagent.wecom;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.lifeagent.common.DatabaseNameValidator;
 import com.lifeagent.config.WeComCrypto;
 import com.lifeagent.config.WeComProperties;
 import com.lifeagent.entity.ChannelBindingEntity;
 import com.lifeagent.entity.ConversationMessageEntity;
 import com.lifeagent.enums.DeliveryStatus;
 import com.lifeagent.enums.MessageRole;
+import com.lifeagent.mapper.ActivityIntervalMapper;
+import com.lifeagent.mapper.BehaviorEventMapper;
 import com.lifeagent.mapper.ChannelBindingMapper;
 import com.lifeagent.mapper.ConversationMessageMapper;
+import com.lifeagent.mapper.DeviceBindingMapper;
+import com.lifeagent.mapper.MonitoredAppMapper;
+import com.lifeagent.mapper.ReminderMapper;
+import com.lifeagent.mapper.ScheduledJobMapper;
 import com.lifeagent.mapper.UserMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -20,6 +27,9 @@ import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.boot.test.web.client.TestRestTemplate;
 import org.springframework.context.annotation.Bean;
 import org.springframework.http.*;
+import org.springframework.test.context.ActiveProfiles;
+
+import javax.sql.DataSource;
 
 import java.time.Clock;
 import java.time.Instant;
@@ -46,6 +56,7 @@ import static org.mockito.Mockito.when;
                 "lifeagent.wecom.corp-secret=test-corp-secret-for-test",
                 "spring.main.allow-bean-definition-overriding=true",
         })
+@ActiveProfiles("test")
 class WeComCallbackIntegrationTest {
 
     @TestConfiguration
@@ -79,17 +90,47 @@ class WeComCallbackIntegrationTest {
     @Autowired
     private UserMapper userMapper;
 
+    @Autowired
+    private ScheduledJobMapper scheduledJobMapper;
+
+    @Autowired
+    private ReminderMapper reminderMapper;
+
+    @Autowired
+    private DeviceBindingMapper deviceBindingMapper;
+
+    @Autowired
+    private BehaviorEventMapper behaviorEventMapper;
+
+    @Autowired
+    private ActivityIntervalMapper activityIntervalMapper;
+
+    @Autowired
+    private MonitoredAppMapper monitoredAppMapper;
+
     @MockBean
     private WeComApiClient weComApiClient;
+
+    @Autowired
+    private DataSource dataSource;
 
     private WeComCrypto crypto;
 
     @BeforeEach
     void setUp() {
+        DatabaseNameValidator.requireTestDatabase(dataSource);
+
         // 异步 AI 任务可能在清理间隙创建 ASSISTANT，循环删除确保完全清空后再删关联表
         while (conversationMessageMapper.selectCount(null) > 0) {
             conversationMessageMapper.delete(null);
         }
+        // 按外键依赖顺序清理所有表
+        activityIntervalMapper.delete(null);
+        behaviorEventMapper.delete(null);
+        monitoredAppMapper.delete(null);
+        scheduledJobMapper.delete(null);
+        reminderMapper.delete(null);
+        deviceBindingMapper.delete(null);
         channelBindingMapper.delete(null);
         userMapper.delete(null);
 

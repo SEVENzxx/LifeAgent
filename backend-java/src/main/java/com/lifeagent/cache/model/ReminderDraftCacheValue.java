@@ -1,4 +1,4 @@
-package com.lifeagent.entity;
+package com.lifeagent.cache.model;
 
 import lombok.Data;
 
@@ -8,7 +8,7 @@ import java.time.Instant;
  * 草稿 Token 对应的候选快照，用于确认时校验一致性。
  */
 @Data
-public class ReminderDraftEntity {
+public class ReminderDraftCacheValue {
 
     /** 稳定草稿 token，防重复确认 */
     private String draftToken;

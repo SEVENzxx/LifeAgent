@@ -1,10 +1,13 @@
-package com.lifeagent.common;
+package com.lifeagent.common.exception;
 
+import com.lifeagent.common.ApiResponse;
+import com.lifeagent.common.BizException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.MissingRequestHeaderException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
@@ -45,7 +48,7 @@ public class GlobalExceptionHandler {
      */
     @ExceptionHandler(HttpMessageNotReadableException.class)
     public ResponseEntity<ApiResponse<Void>> handleHttpMessageNotReadable(HttpMessageNotReadableException exception) {
-        log.warn("请求消息不可读, message={}", exception.getMessage());
+        log.warn("请求消息不可读");
         return ResponseEntity.badRequest().body(ApiResponse.fail("请求参数不合法"));
     }
 
@@ -60,11 +63,60 @@ public class GlobalExceptionHandler {
     }
 
     /**
+     * 处理 Controller 缺少必需请求头的异常。
+     */
+    @ExceptionHandler(MissingRequestHeaderException.class)
+    public ResponseEntity<ApiResponse<Void>> handleMissingHeader(MissingRequestHeaderException exception) {
+        log.warn("缺少必需请求头, headerName={}", exception.getHeaderName());
+        return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                .body(ApiResponse.fail("缺少必需请求头: " + exception.getHeaderName()));
+    }
+
+    /**
+     * 处理 Token 缺失或无效导致的鉴权异常。
+     */
+    @ExceptionHandler(UnauthorizedException.class)
+    public ResponseEntity<ApiResponse<Void>> handleUnauthorized(UnauthorizedException exception) {
+        log.warn("设备鉴权失败, message={}", exception.getMessage());
+        return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                .body(ApiResponse.fail(exception.getMessage()));
+    }
+
+    /**
+     * 处理设备凭证错误或已撤销导致的拒绝异常。
+     */
+    @ExceptionHandler(ForbiddenException.class)
+    public ResponseEntity<ApiResponse<Void>> handleForbidden(ForbiddenException exception) {
+        log.warn("设备凭证错误或已撤销, message={}", exception.getMessage());
+        return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                .body(ApiResponse.fail(exception.getMessage()));
+    }
+
+    /**
+     * 处理请求正文冲突，如相同 eventId 但内容不同。
+     */
+    @ExceptionHandler(ConflictException.class)
+    public ResponseEntity<ApiResponse<Void>> handleConflict(ConflictException exception) {
+        log.warn("请求正文冲突, message={}", exception.getMessage());
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(ApiResponse.fail(exception.getMessage()));
+    }
+
+    /**
+     * 处理时间超限或查询范围超限。
+     */
+    @ExceptionHandler(UnprocessableEntityException.class)
+    public ResponseEntity<ApiResponse<Void>> handleUnprocessable(UnprocessableEntityException exception) {
+        log.warn("请求不可处理, message={}", exception.getMessage());
+        return ResponseEntity.status(HttpStatus.UNPROCESSABLE_ENTITY)
+                .body(ApiResponse.fail(exception.getMessage()));
+    }
+
+    /**
      * 处理未预期异常；完整堆栈只在此处记录一次，响应不暴露内部细节。
      */
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ApiResponse<Void>> handleUnexpectedException(Exception exception) {
-        // 未知异常只在统一出口打印完整堆栈，避免同一调用链重复记录异常。
         log.error("服务发生未处理异常, exceptionType={}", exception.getClass().getSimpleName(), exception);
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                 .body(ApiResponse.fail("服务暂时不可用"));
