@@ -1,0 +1,8 @@
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5432/lifeagent_test
+    username: lifeagent
+    password: lifeagent
+  data:
+    redis:
+      database: 1
