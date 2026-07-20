@@ -4,13 +4,25 @@
         "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.lifeagent.mapper.ScheduledJobMapper">
 
-    <!-- 幂等插入 -->
+    <!-- 幂等插入（REMINDER_DELIVERY） -->
     <insert id="insertIgnore" useGeneratedKeys="true" keyProperty="id">
         INSERT INTO scheduled_jobs
             (job_type, business_key, reminder_id, node_type,
              scheduled_at, next_run_at, status, retry_count,
              created_at, updated_at)
         VALUES (#{jobType}, #{businessKey}, #{reminderId}, #{nodeType},
+                #{scheduledAt}, #{nextRunAt}, 'READY', 0,
+                #{createdAt}, #{updatedAt})
+        ON CONFLICT (business_key) DO NOTHING
+    </insert>
+
+    <!-- 幂等插入（HABIT_DELIVERY） -->
+    <insert id="insertIgnoreHabit" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO scheduled_jobs
+            (job_type, business_key, habit_execution_id, node_type,
+             scheduled_at, next_run_at, status, retry_count,
+             created_at, updated_at)
+        VALUES (#{jobType}, #{businessKey}, #{habitExecutionId}, #{nodeType},
                 #{scheduledAt}, #{nextRunAt}, 'READY', 0,
                 #{createdAt}, #{updatedAt})
         ON CONFLICT (business_key) DO NOTHING
@@ -87,6 +99,18 @@
           AND status IN ('READY', 'RETRY_WAIT', 'RUNNING')
     </update>
 
+    <!-- 取消指定 Habit 的所有未来 Job -->
+    <update id="cancelByHabit">
+        UPDATE scheduled_jobs
+        SET status = 'CANCELLED',
+            lease_owner = NULL,
+            lease_until = NULL,
+            updated_at = #{now}
+        WHERE job_type = 'HABIT_DELIVERY'
+          AND business_key LIKE CONCAT('HABIT_DELIVERY:', #{habitId}, '%')
+          AND status IN ('READY', 'RETRY_WAIT', 'RUNNING')
+    </update>
+
     <!-- 标记超过宽限的 Job 为 MISSED -->
     <update id="markMissed">
         UPDATE scheduled_jobs
@@ -104,6 +128,14 @@
         FROM scheduled_jobs
         WHERE reminder_id = #{reminderId}
           AND status = #{status}
+        ORDER BY id
+    </select>
+
+    <!-- 查询 HabitExecution 下的 Job -->
+    <select id="selectByHabitExecution" resultType="com.lifeagent.entity.ScheduledJobEntity">
+        SELECT *
+        FROM scheduled_jobs
+        WHERE habit_execution_id = #{habitExecutionId}
         ORDER BY id
     </select>
 

@@ -1,6 +1,7 @@
 package com.lifeagent.ai;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.databind.json.JsonMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.lifeagent.config.AiProperties;
@@ -42,6 +43,7 @@ public class AiApiClient {
         this.restTemplate = new RestTemplate(factory);
         this.objectMapper = JsonMapper.builder()
                 .addModule(new JavaTimeModule())
+                .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS)
                 .build();
     }
 
@@ -130,6 +132,7 @@ public class AiApiClient {
                 .replyDraft(null)
                 .updatedSummary(null)
                 .reminderResolution(null)
+                .habitResolution(null)
                 .build();
     }
 }

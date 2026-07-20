@@ -17,14 +17,17 @@ public class ScheduledJobEntity {
     @TableId(type = IdType.AUTO)
     private Long id;
 
-    /** 任务类型，当前只允许 REMINDER_DELIVERY */
+    /** 任务类型：REMINDER_DELIVERY / HABIT_DELIVERY */
     private String jobType;
 
-    /** 稳定唯一键 */
+    /** 稳定唯一键：REMINDER_DELIVERY:{reminderId}:{nodeType} 或 HABIT_DELIVERY:{habitId}:{occurrenceKey} */
     private String businessKey;
 
-    /** FK → reminders.id */
+    /** FK → reminders.id，HABIT_DELIVERY 时可空 */
     private Long reminderId;
+
+    /** FK → habit_executions.id，REMINDER_DELIVERY 时可空 */
+    private Long habitExecutionId;
 
     /** 节点类型：PRIMARY/ADVANCE/SNOOZE */
     private String nodeType;

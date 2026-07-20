@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.lifeagent.mapper.HabitMapper">
+
+    <!-- 幂等插入 -->
+    <insert id="insertIgnore" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO habits
+            (user_id, name, daily_times, timezone, start_date, end_date,
+             status, source_message_id, version, created_at, updated_at)
+        VALUES (#{userId}, #{name}, #{dailyTimes}::jsonb, #{timezone}, #{startDate}, #{endDate},
+                #{status}, #{sourceMessageId}, 1, #{createdAt}, #{updatedAt})
+        ON CONFLICT (source_message_id) DO NOTHING
+    </insert>
+
+    <!-- 乐观锁条件更新状态 -->
+    <update id="updateStatusWithVersion">
+        UPDATE habits
+        SET status = #{newStatus},
+            version = #{version} + 1,
+            updated_at = #{now}
+        WHERE id = #{id}
+          AND status = #{oldStatus}
+          AND version = #{version}
+    </update>
+
+    <!-- 查询用户最近 ACTIVE/PAUSED 习惯 -->
+    <select id="selectRecentByUserId" resultType="com.lifeagent.entity.HabitEntity">
+        SELECT *
+        FROM habits
+        WHERE user_id = #{userId}
+          AND status IN ('ACTIVE', 'PAUSED')
+        ORDER BY updated_at DESC
+        LIMIT #{limit}
+    </select>
+
+    <!-- 按 source_message_id 查询 -->
+    <select id="selectBySourceMessage" resultType="com.lifeagent.entity.HabitEntity">
+        SELECT *
+        FROM habits
+        WHERE source_message_id = #{sourceMessageId}
+        LIMIT 1
+    </select>
+
+    <!-- 按名称查询 -->
+    <select id="selectByName" resultType="com.lifeagent.entity.HabitEntity">
+        SELECT *
+        FROM habits
+        WHERE user_id = #{userId}
+          AND name = #{name}
+          AND status IN ('ACTIVE', 'PAUSED')
+        ORDER BY updated_at DESC
+    </select>
+
+    <!-- 查询所有 ACTIVE 且未结束的习惯 -->
+    <select id="selectActiveForScheduling" resultType="com.lifeagent.entity.HabitEntity">
+        SELECT *
+        FROM habits
+        WHERE status = 'ACTIVE'
+          AND (end_date IS NULL OR end_date &gt;= #{now}::date)
+    </select>
+
+</mapper>

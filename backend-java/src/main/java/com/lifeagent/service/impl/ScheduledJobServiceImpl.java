@@ -4,15 +4,23 @@ import com.lifeagent.config.AiProperties;
 import com.lifeagent.dto.turn.ReminderResolution;
 import com.lifeagent.entity.ChannelBindingEntity;
 import com.lifeagent.entity.ConversationMessageEntity;
+import com.lifeagent.entity.HabitEntity;
+import com.lifeagent.entity.HabitExecutionEntity;
 import com.lifeagent.entity.ReminderEntity;
 import com.lifeagent.entity.ScheduledJobEntity;
 import com.lifeagent.enums.DeliveryStatus;
+import com.lifeagent.enums.ExecutionStatus;
+import com.lifeagent.enums.HabitStatus;
+import com.lifeagent.enums.JobType;
 import com.lifeagent.enums.MessageRole;
 import com.lifeagent.enums.ReminderStatus;
 import com.lifeagent.mapper.ChannelBindingMapper;
 import com.lifeagent.mapper.ConversationMessageMapper;
+import com.lifeagent.mapper.HabitExecutionMapper;
+import com.lifeagent.mapper.HabitMapper;
 import com.lifeagent.mapper.ReminderMapper;
 import com.lifeagent.mapper.ScheduledJobMapper;
+import com.lifeagent.service.HabitService;
 import com.lifeagent.service.ReminderService;
 import com.lifeagent.service.ScheduledJobService;
 import com.lifeagent.wecom.WeComApiClient;
@@ -46,6 +54,9 @@ public class ScheduledJobServiceImpl implements ScheduledJobService {
     private final ConversationMessageMapper conversationMessageMapper;
     private final ChannelBindingMapper channelBindingMapper;
     private final ReminderService reminderService;
+    private final HabitService habitService;
+    private final HabitMapper habitMapper;
+    private final HabitExecutionMapper habitExecutionMapper;
     private final WeComApiClient weComApiClient;
     private final AiProperties aiProperties;
     private final Clock clock;
@@ -93,9 +104,23 @@ public class ScheduledJobServiceImpl implements ScheduledJobService {
 
     private void executeJob(ScheduledJobEntity job) {
         Instant now = Instant.now(clock);
+        String jobType = job.getJobType();
+
+        if (JobType.REMINDER_DELIVERY.name().equals(jobType)) {
+            executeReminderJob(job, now);
+        } else if (JobType.HABIT_DELIVERY.name().equals(jobType)) {
+            executeHabitJob(job, now);
+        } else {
+            log.warn("未知 Job 类型, jobId={}, jobType={}", job.getId(), jobType);
+        }
+    }
+
+    /**
+     * 执行 REMINDER_DELIVERY Job。
+     */
+    private void executeReminderJob(ScheduledJobEntity job, Instant now) {
         Long reminderId = job.getReminderId();
 
-        // 1. 重新读取 Reminder
         ReminderEntity reminder = reminderMapper.selectById(reminderId);
         if (reminder == null) {
             log.warn("Job 对应的 Reminder 不存在, jobId={}, reminderId={}", job.getId(), reminderId);
@@ -103,7 +128,6 @@ public class ScheduledJobServiceImpl implements ScheduledJobService {
             return;
         }
 
-        // 2. 检查 Reminder 状态
         String rStatus = reminder.getStatus();
         if (!ReminderStatus.ACTIVE.name().equals(rStatus)
                 && !ReminderStatus.ACKNOWLEDGED.name().equals(rStatus)) {
@@ -112,51 +136,129 @@ public class ScheduledJobServiceImpl implements ScheduledJobService {
             return;
         }
 
-        // 3. 查找用户的渠道绑定
         Long userId = reminder.getUserId();
-        ChannelBindingEntity binding = channelBindingMapper.selectOne(
-                new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<ChannelBindingEntity>()
-                        .eq(ChannelBindingEntity::getUserId, userId)
-                        .eq(ChannelBindingEntity::getChannel, CHANNEL_WECOM)
-                        .last("LIMIT 1"));
+        ChannelBindingEntity binding = findUserBinding(userId);
         if (binding == null) {
             log.warn("用户没有有效的渠道绑定, userId={}, jobId={}", userId, job.getId());
             scheduledJobMapper.markFailed(job.getId(), "NO_BINDING", now);
             return;
         }
 
-        // 4. 生成幂等 ASSISTANT 消息
         String assistantIdempotencyKey = "REMINDER_JOB:" + job.getId();
         String deliveryContent = reminderService.buildDeliveryMessage(reminder.getContent());
 
-        // 5. 创建 ASSISTANT 消息（事务内）
-        Long assistantId = createAssistantMessage(binding.getId(), assistantIdempotencyKey, deliveryContent);
+        Long assistantId = createOrFindAssistant(binding.getId(), assistantIdempotencyKey, deliveryContent, job);
         if (assistantId == null) {
-            log.warn("ASSISTANT 已存在（幂等跳过）, idempotencyKey={}, jobId={}",
-                    assistantIdempotencyKey, job.getId());
-            // 尝试查找已有 ASSISTANT
-            assistantId = findAssistantId(job.getId());
-        }
-
-        if (assistantId == null) {
-            log.warn("无法获取 ASSISTANT 消息 ID, jobId={}", job.getId());
             return;
         }
 
-        // 6. 发送（事务外）
-        boolean sent;
-        try {
-            sent = weComApiClient.sendTextMessage(binding.getExternalUserId(), deliveryContent);
-        } catch (Exception e) {
-            log.warn("企业微信发送异常, jobId={}", job.getId(), e);
-            sent = false;
+        boolean sent = sendDelivery(binding.getExternalUserId(), deliveryContent, job);
+        if (sent) {
+            handleReminderSuccess(job, reminder, assistantId, now);
+        } else {
+            handleReminderFailure(job, reminder, assistantId, now);
+        }
+    }
+
+    /**
+     * 执行 HABIT_DELIVERY Job。
+     */
+    private void executeHabitJob(ScheduledJobEntity job, Instant now) {
+        Long habitExecutionId = job.getHabitExecutionId();
+        if (habitExecutionId == null) {
+            log.warn("HABIT_DELIVERY 缺少 habit_execution_id, jobId={}", job.getId());
+            scheduledJobMapper.markFailed(job.getId(), "NO_EXECUTION_ID", now);
+            return;
         }
 
-        // 7. 更新状态
+        HabitExecutionEntity execution = habitExecutionMapper.selectById(habitExecutionId);
+        if (execution == null) {
+            log.warn("Job 对应的 Execution 不存在, jobId={}, habitExecutionId={}", job.getId(), habitExecutionId);
+            scheduledJobMapper.markFailed(job.getId(), "EXECUTION_NOT_FOUND", now);
+            return;
+        }
+
+        // 检查 Execution 状态
+        if (!ExecutionStatus.SCHEDULED.name().equals(execution.getStatus())) {
+            log.info("Execution 状态不允许发送, jobId={}, executionStatus={}", job.getId(), execution.getStatus());
+            scheduledJobMapper.markFailed(job.getId(), "INVALID_EXECUTION_STATUS", now);
+            return;
+        }
+
+        HabitEntity habit = habitMapper.selectById(execution.getHabitId());
+        if (habit == null) {
+            log.warn("Execution 对应的 Habit 不存在, executionId={}, habitId={}",
+                    execution.getId(), execution.getHabitId());
+            scheduledJobMapper.markFailed(job.getId(), "HABIT_NOT_FOUND", now);
+            return;
+        }
+
+        if (!HabitStatus.ACTIVE.name().equals(habit.getStatus())) {
+            log.info("Habit 不是 ACTIVE 状态, jobId={}, habitStatus={}", job.getId(), habit.getStatus());
+            scheduledJobMapper.cancelByHabit(habit.getId(), now);
+            return;
+        }
+
+        Long userId = habit.getUserId();
+        ChannelBindingEntity binding = findUserBinding(userId);
+        if (binding == null) {
+            log.warn("用户没有有效的渠道绑定, userId={}, jobId={}", userId, job.getId());
+            scheduledJobMapper.markFailed(job.getId(), "NO_BINDING", now);
+            return;
+        }
+
+        String assistantIdempotencyKey = "HABIT_JOB:" + job.getId();
+        String deliveryContent = habitService.buildDeliveryMessage(habit.getName());
+
+        Long assistantId = createOrFindAssistant(binding.getId(), assistantIdempotencyKey, deliveryContent, job);
+        if (assistantId == null) {
+            return;
+        }
+
+        boolean sent = sendDelivery(binding.getExternalUserId(), deliveryContent, job);
         if (sent) {
-            handleSuccess(job, reminder, assistantId, now);
+            handleHabitSuccess(job, execution, assistantId, now);
         } else {
-            handleFailure(job, reminder, assistantId, now);
+            handleHabitFailure(job, execution, assistantId, now);
+        }
+    }
+
+    /**
+     * 查找用户的企业微信渠道绑定。
+     */
+    private ChannelBindingEntity findUserBinding(Long userId) {
+        return channelBindingMapper.selectOne(
+                new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<ChannelBindingEntity>()
+                        .eq(ChannelBindingEntity::getUserId, userId)
+                        .eq(ChannelBindingEntity::getChannel, CHANNEL_WECOM)
+                        .last("LIMIT 1"));
+    }
+
+    /**
+     * 创建或查找幂等 ASSISTANT 消息。
+     */
+    private Long createOrFindAssistant(Long bindingId, String idempotencyKey,
+                                        String content, ScheduledJobEntity job) {
+        Long assistantId = createAssistantMessage(bindingId, idempotencyKey, content);
+        if (assistantId == null) {
+            log.warn("ASSISTANT 已存在（幂等跳过）, idempotencyKey={}, jobId={}", idempotencyKey, job.getId());
+            assistantId = findAssistantIdByKey(idempotencyKey);
+        }
+        if (assistantId == null) {
+            log.warn("无法获取 ASSISTANT 消息 ID, jobId={}", job.getId());
+        }
+        return assistantId;
+    }
+
+    /**
+     * 发送消息到企业微信。
+     */
+    private boolean sendDelivery(String externalUserId, String content, ScheduledJobEntity job) {
+        try {
+            return weComApiClient.sendTextMessage(externalUserId, content);
+        } catch (Exception e) {
+            log.warn("企业微信发送异常, jobId={}", job.getId(), e);
+            return false;
         }
     }
 
@@ -172,26 +274,22 @@ public class ScheduledJobServiceImpl implements ScheduledJobService {
         return conversationMessageMapper.insertIgnoreAssistant(assistant) > 0 ? assistant.getId() : null;
     }
 
-    // ==================== 成功处理 ====================
+    // ==================== 提醒成功处理 ====================
 
-    private void handleSuccess(ScheduledJobEntity job, ReminderEntity reminder,
-                                Long assistantId, Instant now) {
-        // 1. 更新 Job 为 SUCCEEDED
+    private void handleReminderSuccess(ScheduledJobEntity job, ReminderEntity reminder,
+                                        Long assistantId, Instant now) {
         scheduledJobMapper.markSucceeded(job.getId(), assistantId, now);
 
-        // 2. 更新 ASSISTANT 为 SENT
         conversationMessageMapper.updateDeliveryStatus(
                 assistantId, DeliveryStatus.SENT.name(),
                 LocalDateTime.ofInstant(now, ZoneId.systemDefault()).withNano(0));
 
-        // 3. 检查是否有其他未来 Job
         List<ScheduledJobEntity> remainingJobs = scheduledJobMapper.selectByReminderAndStatus(
                 reminder.getId(), "READY");
         List<ScheduledJobEntity> remainingRetry = scheduledJobMapper.selectByReminderAndStatus(
                 reminder.getId(), "RETRY_WAIT");
 
         if (remainingJobs.isEmpty() && remainingRetry.isEmpty()) {
-            // 没有剩余节点，标记 Reminder 为 DELIVERED
             reminderMapper.updateStatusWithVersion(
                     reminder.getId(), ReminderStatus.DELIVERED.name(),
                     reminder.getStatus(), reminder.getVersion(), now);
@@ -201,15 +299,14 @@ public class ScheduledJobServiceImpl implements ScheduledJobService {
         log.info("Job 发送成功, jobId={}, assistantId={}", job.getId(), assistantId);
     }
 
-    // ==================== 失败处理 ====================
+    // ==================== 提醒失败处理 ====================
 
-    private void handleFailure(ScheduledJobEntity job, ReminderEntity reminder,
-                                Long assistantId, Instant now) {
+    private void handleReminderFailure(ScheduledJobEntity job, ReminderEntity reminder,
+                                        Long assistantId, Instant now) {
         int retryCount = job.getRetryCount() != null ? job.getRetryCount() : 0;
         int maxRetries = aiProperties.getReminderMaxRetries();
 
         if (retryCount < maxRetries) {
-            // 计算下次重试时间
             long[] delays = parseRetryDelays();
             long delayMinutes = retryCount < delays.length
                     ? delays[retryCount] : delays[delays.length - 1];
@@ -219,13 +316,11 @@ public class ScheduledJobServiceImpl implements ScheduledJobService {
             log.info("Job 发送失败，将重试, jobId={}, retryCount={}, nextRun={}",
                     job.getId(), retryCount + 1, nextRun);
         } else {
-            // 重试耗尽
             scheduledJobMapper.markFailed(job.getId(), "RETRY_EXHAUSTED", now);
             conversationMessageMapper.updateDeliveryStatus(
                     assistantId, DeliveryStatus.FAILED.name(), null);
             log.warn("Job 重试耗尽, jobId={}, reminderId={}", job.getId(), reminder.getId());
 
-            // 检查是否还有其他 Job
             List<ScheduledJobEntity> remainingJobs = scheduledJobMapper.selectByReminderAndStatus(
                     reminder.getId(), "READY");
             List<ScheduledJobEntity> remainingRetry = scheduledJobMapper.selectByReminderAndStatus(
@@ -236,6 +331,54 @@ public class ScheduledJobServiceImpl implements ScheduledJobService {
                         reminder.getStatus(), reminder.getVersion(), now);
                 log.warn("提醒最终失败（无其他可执行节点）, reminderId={}", reminder.getId());
             }
+        }
+    }
+
+    // ==================== 习惯成功处理 ====================
+
+    private void handleHabitSuccess(ScheduledJobEntity job, HabitExecutionEntity execution,
+                                     Long assistantId, Instant now) {
+        scheduledJobMapper.markSucceeded(job.getId(), assistantId, now);
+
+        conversationMessageMapper.updateDeliveryStatus(
+                assistantId, DeliveryStatus.SENT.name(),
+                LocalDateTime.ofInstant(now, ZoneId.systemDefault()).withNano(0));
+
+        // 更新 Execution 为 DELIVERED
+        habitExecutionMapper.updateStatusWithVersion(
+                execution.getId(), ExecutionStatus.DELIVERED.name(),
+                execution.getStatus(), execution.getVersion(), now);
+
+        log.info("习惯 Job 发送成功, jobId={}, executionId={}", job.getId(), execution.getId());
+    }
+
+    // ==================== 习惯失败处理 ====================
+
+    private void handleHabitFailure(ScheduledJobEntity job, HabitExecutionEntity execution,
+                                     Long assistantId, Instant now) {
+        int retryCount = job.getRetryCount() != null ? job.getRetryCount() : 0;
+        int maxRetries = aiProperties.getReminderMaxRetries();
+
+        if (retryCount < maxRetries) {
+            long[] delays = parseRetryDelays();
+            long delayMinutes = retryCount < delays.length
+                    ? delays[retryCount] : delays[delays.length - 1];
+            Instant nextRun = now.plusSeconds(delayMinutes * 60);
+
+            scheduledJobMapper.markRetryWait(job.getId(), nextRun, "SEND_FAILED", now);
+            log.info("习惯 Job 发送失败，将重试, jobId={}, retryCount={}, nextRun={}",
+                    job.getId(), retryCount + 1, nextRun);
+        } else {
+            scheduledJobMapper.markFailed(job.getId(), "RETRY_EXHAUSTED", now);
+            conversationMessageMapper.updateDeliveryStatus(
+                    assistantId, DeliveryStatus.FAILED.name(), null);
+
+            // 更新 Execution 为 FAILED（不影响 Habit 后续调度）
+            habitExecutionMapper.updateStatusWithVersion(
+                    execution.getId(), ExecutionStatus.FAILED.name(),
+                    execution.getStatus(), execution.getVersion(), now);
+
+            log.warn("习惯 Job 重试耗尽, jobId={}, executionId={}", job.getId(), execution.getId());
         }
     }
 
@@ -259,8 +402,7 @@ public class ScheduledJobServiceImpl implements ScheduledJobService {
         return APPLICATION_NAME + "@" + System.getenv("HOSTNAME");
     }
 
-    private Long findAssistantId(Long jobId) {
-        String idempotencyKey = "REMINDER_JOB:" + jobId;
+    private Long findAssistantIdByKey(String idempotencyKey) {
         var wrapper = new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<ConversationMessageEntity>()
                 .eq(ConversationMessageEntity::getIdempotencyKey, idempotencyKey)
                 .orderByAsc(ConversationMessageEntity::getId)

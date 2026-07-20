@@ -6,6 +6,7 @@ from lifeagent_ai.config import (
     CONTEXT_RECENT_MAX_CHARS,
     CONTEXT_RECENT_MAX_MESSAGES,
     CONTEXT_SUMMARY_MAX_CHARS,
+    INTENT_HABIT_CREATE,
     INTENT_REMINDER_CREATE,
     MAX_MESSAGE_LENGTH,
     MAX_IDENTIFIER_LENGTH,
@@ -14,6 +15,8 @@ from lifeagent_ai.config import (
     SCHEMA_VERSION_PATTERN,
     VALID_DRAFT_ACTIONS,
     VALID_DRAFT_TARGETS,
+    VALID_HABIT_ACTIONS,
+    VALID_HABIT_TARGETS,
     VALID_INTENTS,
     VALID_RESOLUTION_STATUSES,
 )
@@ -74,6 +77,73 @@ class RecentReminderInfo(BaseModel):
     event_at: str | None = Field(default=None, description="事件 UTC 时间（ISO 8601 带偏移）")
     remind_at: str | None = Field(default=None, description="主提醒 UTC 时间（ISO 8601 带偏移）")
     last_sent_at: str | None = Field(default=None, description="最近发送时间（ISO 8601 带偏移）")
+
+
+class HabitResolution(BaseModel):
+    """Python 返回的习惯候选解析结果。"""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    target: str = Field(description="目标类型：NEW / PENDING_DRAFT / RECENT_HABIT / RECENT_EXECUTION")
+    action: str = Field(
+        description="操作类型：UPSERT_DRAFT / CONFIRM_DRAFT / ACK / COMPLETE / PAUSE / RESUME / CANCEL",
+    )
+    habit_id: int | None = Field(default=None, description="习惯 ID，Java 提供时才有效")
+    habit_version: int | None = Field(default=None, description="习惯版本号")
+    name: str | None = Field(default=None, max_length=200, description="习惯名称")
+    daily_times: list[str] | None = Field(default=None, description="每日提醒时刻 HH:mm 列表")
+    start_date: str | None = Field(default=None, description="开始日期，ISO 日期")
+    end_date: str | None = Field(default=None, description="结束日期，可空")
+    missing_fields: list[str] = Field(
+        default_factory=list,
+        description="缺失字段",
+    )
+
+    @model_validator(mode="after")
+    def validate_habit_resolution_fields(self) -> Self:
+        """校验 target 和 action 枚举值。"""
+        if self.target not in VALID_HABIT_TARGETS:
+            raise ValueError(f"未知 target: {self.target}")
+        if self.action not in VALID_HABIT_ACTIONS:
+            raise ValueError(f"未知 action: {self.action}")
+        return self
+
+
+class PendingHabitInfo(BaseModel):
+    """最多一个未过期 Redis 习惯候选。"""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    draft_token: str = Field(description="草稿 token")
+    name: str | None = Field(default=None, max_length=200, description="习惯名称")
+    daily_times: list[str] | None = Field(default=None, description="每日提醒时刻 HH:mm 列表")
+    start_date: str | None = Field(default=None, description="开始日期，ISO 日期")
+    end_date: str | None = Field(default=None, description="结束日期，可空")
+    timezone: str = Field(description="用户 IANA 时区")
+    draft_status: str = Field(description="候选状态：COLLECTING / AWAITING_CONFIRMATION")
+
+
+class RecentHabitInfo(BaseModel):
+    """用户最近 ACTIVE/PAUSED 习惯。"""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    habit_id: int = Field(description="习惯 ID")
+    version: int = Field(description="版本号")
+    name: str = Field(max_length=200, description="习惯名称")
+    daily_times: list[str] = Field(description="每日提醒时刻 HH:mm 列表")
+    status: str = Field(description="状态")
+
+
+class RecentExecutionInfo(BaseModel):
+    """最近一次已发送但尚未完成的执行。"""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    execution_id: int = Field(description="执行 ID")
+    habit_id: int = Field(description="习惯 ID")
+    occurrence_key: str = Field(description="发生键")
+    status: str = Field(description="状态")
 
 
 class ReminderResolution(BaseModel):
@@ -144,6 +214,18 @@ class ContextPackage(BaseModel):
         default=None,
         description="最多一个最近明确 Reminder",
     )
+    pending_habit: PendingHabitInfo | None = Field(
+        default=None,
+        description="最多一个未过期 Redis 习惯候选",
+    )
+    recent_habits: list[RecentHabitInfo] = Field(
+        default_factory=list,
+        description="最多 5 个最近 ACTIVE/PAUSED 习惯",
+    )
+    recent_habit_execution: RecentExecutionInfo | None = Field(
+        default=None,
+        description="最近一次已发送但尚未完成的执行",
+    )
 
 
 class TurnResolutionRequest(BaseModel):
@@ -194,6 +276,10 @@ class TurnResolutionResponse(BaseModel):
         default=None,
         description="LA-005 提醒候选解析结果",
     )
+    habit_resolution: HabitResolution | None = Field(
+        default=None,
+        description="LA-007 习惯候选解析结果",
+    )
 
     @model_validator(mode="after")
     def validate_cross_field_constraints(self) -> Self:
@@ -220,5 +306,9 @@ class TurnResolutionResponse(BaseModel):
         # LA-005 提醒约束：非提醒消息时 reminder_resolution 必须为空
         if intent != INTENT_REMINDER_CREATE and self.reminder_resolution is not None:
             raise ValueError("非 REMINDER_CREATE 意图时不允许包含 reminder_resolution")
+
+        # LA-007 习惯约束：非 HABIT_CREATE 时 habit_resolution 必须为空
+        if intent != INTENT_HABIT_CREATE and self.habit_resolution is not None:
+            raise ValueError("非 HABIT_CREATE 意图时不允许包含 habit_resolution")
 
         return self

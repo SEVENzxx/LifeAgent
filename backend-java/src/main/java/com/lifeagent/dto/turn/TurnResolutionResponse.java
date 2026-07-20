@@ -38,4 +38,7 @@ public class TurnResolutionResponse {
 
     /** LA-005 提醒候选解析结果，可空 */
     ReminderResolution reminderResolution;
+
+    /** LA-007 习惯候选解析结果，可空 */
+    HabitResolution habitResolution;
 }

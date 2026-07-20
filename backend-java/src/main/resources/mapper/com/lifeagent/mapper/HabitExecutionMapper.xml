@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.lifeagent.mapper.HabitExecutionMapper">
+
+    <!-- 幂等插入 -->
+    <insert id="insertIgnore" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO habit_executions
+            (habit_id, occurrence_key, scheduled_at, status, version, created_at, updated_at)
+        VALUES (#{habitId}, #{occurrenceKey}, #{scheduledAt}, 'SCHEDULED',
+                1, #{createdAt}, #{updatedAt})
+        ON CONFLICT (habit_id, occurrence_key) DO NOTHING
+    </insert>
+
+    <!-- 乐观锁条件更新状态 -->
+    <update id="updateStatusWithVersion">
+        UPDATE habit_executions
+        SET status = #{newStatus},
+            version = #{version} + 1,
+            completed_at = CASE WHEN #{newStatus} = 'COMPLETED' THEN #{now} ELSE completed_at END,
+            updated_at = #{now}
+        WHERE id = #{id}
+          AND status = #{oldStatus}
+          AND version = #{version}
+    </update>
+
+    <!-- 查询习惯最近一次已发送但未完成的执行 -->
+    <select id="selectRecentDelivered" resultType="com.lifeagent.entity.HabitExecutionEntity">
+        SELECT *
+        FROM habit_executions
+        WHERE habit_id = #{habitId}
+          AND status IN ('DELIVERED', 'ACKNOWLEDGED')
+        ORDER BY scheduled_at DESC
+        LIMIT 1
+    </select>
+
+    <!-- 查询用户最近一次已发送但未完成的执行 -->
+    <select id="selectUserRecentDelivered" resultType="com.lifeagent.entity.HabitExecutionEntity">
+        SELECT e.*
+        FROM habit_executions e
+        JOIN habits h ON h.id = e.habit_id
+        WHERE h.user_id = #{userId}
+          AND e.status IN ('DELIVERED', 'ACKNOWLEDGED')
+        ORDER BY e.scheduled_at DESC
+        LIMIT 1
+    </select>
+
+    <!-- 查询习惯下指定状态的执行 -->
+    <select id="selectByHabitAndStatus" resultType="com.lifeagent.entity.HabitExecutionEntity">
+        SELECT *
+        FROM habit_executions
+        WHERE habit_id = #{habitId}
+          AND status = #{status}
+        ORDER BY scheduled_at
+    </select>
+
+    <!-- 取消习惯下所有未来执行 -->
+    <update id="cancelByHabit">
+        UPDATE habit_executions
+        SET status = 'CANCELLED',
+            version = version + 1,
+            updated_at = #{now}
+        WHERE habit_id = #{habitId}
+          AND status IN ('SCHEDULED', 'DELIVERED', 'ACKNOWLEDGED')
+    </update>
+
+    <!-- 按 completion_message_id 查询 -->
+    <select id="selectByCompletionMessage" resultType="com.lifeagent.entity.HabitExecutionEntity">
+        SELECT *
+        FROM habit_executions
+        WHERE completion_message_id = #{messageId}
+        LIMIT 1
+    </select>
+
+</mapper>

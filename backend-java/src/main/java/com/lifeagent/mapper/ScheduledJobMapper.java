@@ -13,10 +13,16 @@ import java.util.List;
 public interface ScheduledJobMapper extends BaseMapper<ScheduledJobEntity> {
 
     /**
-     * 使用 ON CONFLICT DO NOTHING 安全插入 Job。
+     * 使用 ON CONFLICT DO NOTHING 安全插入 Job（REMINDER_DELIVERY）。
      * business_key 唯一约束保证同一 Job 不会重复创建。
      */
     int insertIgnore(ScheduledJobEntity entity);
+
+    /**
+     * 使用 ON CONFLICT DO NOTHING 安全插入 HABIT_DELIVERY Job。
+     * habit_execution_id 唯一约束保证同一 Execution 不会重复创建 Job。
+     */
+    int insertIgnoreHabit(ScheduledJobEntity entity);
 
     /**
      * 扫描可领取的 Job：READY/RETRY_WAIT 且 next_run_at <= now，或租约已过期的 RUNNING。
@@ -67,6 +73,12 @@ public interface ScheduledJobMapper extends BaseMapper<ScheduledJobEntity> {
                          @Param("now") Instant now);
 
     /**
+     * 取消指定 Habit 的所有未来 Job。
+     */
+    int cancelByHabit(@Param("habitId") Long habitId,
+                      @Param("now") Instant now);
+
+    /**
      * 标记超过宽限的 Job 为 MISSED。
      */
     int markMissed(@Param("deadline") Instant deadline,
@@ -77,4 +89,9 @@ public interface ScheduledJobMapper extends BaseMapper<ScheduledJobEntity> {
      */
     List<ScheduledJobEntity> selectByReminderAndStatus(@Param("reminderId") Long reminderId,
                                                        @Param("status") String status);
+
+    /**
+     * 查询指定 HabitExecution 下的 Job。
+     */
+    List<ScheduledJobEntity> selectByHabitExecution(@Param("habitExecutionId") Long habitExecutionId);
 }

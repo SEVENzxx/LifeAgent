@@ -68,4 +68,18 @@ public class AiProperties {
 
     /** 提醒写入最低置信度 */
     private double reminderWriteMinConfidence = Constants.REMINDER_WRITE_MIN_CONFIDENCE;
+
+    // ========== LA-007 日常习惯 ==========
+
+    /** 习惯候选 TTL（分钟） */
+    private long habitDraftTtlMinutes = Constants.HABIT_DRAFT_TTL_MINUTES;
+
+    /** 习惯写入最低置信度 */
+    private double habitWriteMinConfidence = Constants.HABIT_WRITE_MIN_CONFIDENCE;
+
+    /** 习惯补齐扫描间隔（毫秒） */
+    private long habitScheduleScanIntervalMs = Constants.HABIT_SCHEDULE_SCAN_INTERVAL_MS;
+
+    /** 每日最多提醒时刻 */
+    private int habitMaxDailyTimes = Constants.HABIT_MAX_DAILY_TIMES;
 }

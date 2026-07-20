@@ -89,6 +89,9 @@ public final class Constants {
     /** Redis key 前缀：提醒候选 */
     public static final String REDIS_REMINDER_DRAFT_PREFIX = "lifeagent:reminder:draft:";
 
+    /** Redis key 前缀：习惯候选 */
+    public static final String REDIS_HABIT_DRAFT_PREFIX = "lifeagent:habit:draft:";
+
     /** Redis key 前缀：设备绑定缓存 */
     public static final String REDIS_BEHAVIOR_DEVICE_BINDING_PREFIX = "lifeagent:behavior:device-binding:";
 
@@ -120,6 +123,43 @@ public final class Constants {
 
     /** 提醒 Power 文案前缀 */
     public static final String REMINDER_MESSAGE_PREFIX = "提醒你：";
+
+    /** 习惯提醒文案前缀 */
+    public static final String HABIT_MESSAGE_PREFIX = "习惯提醒：";
+
+    /** 习惯目标类型 */
+    public static final String HABIT_TARGET_NEW = "NEW";
+    public static final String HABIT_TARGET_PENDING_DRAFT = "PENDING_DRAFT";
+    public static final String HABIT_TARGET_RECENT_HABIT = "RECENT_HABIT";
+    public static final String HABIT_TARGET_RECENT_EXECUTION = "RECENT_EXECUTION";
+
+    /** 习惯操作类型 */
+    public static final String HABIT_ACTION_UPSERT_DRAFT = "UPSERT_DRAFT";
+    public static final String HABIT_ACTION_CONFIRM_DRAFT = "CONFIRM_DRAFT";
+    public static final String HABIT_ACTION_ACK = "ACK";
+    public static final String HABIT_ACTION_COMPLETE = "COMPLETE";
+    public static final String HABIT_ACTION_PAUSE = "PAUSE";
+    public static final String HABIT_ACTION_RESUME = "RESUME";
+    public static final String HABIT_ACTION_CANCEL = "CANCEL";
+
+    /** 习惯候选状态 */
+    public static final String HABIT_DRAFT_STATUS_COLLECTING = "COLLECTING";
+    public static final String HABIT_DRAFT_STATUS_AWAITING_CONFIRMATION = "AWAITING_CONFIRMATION";
+
+    /** 习惯写入最低置信度 */
+    public static final double HABIT_WRITE_MIN_CONFIDENCE = 0.8;
+
+    /** 习惯候选 TTL（分钟） */
+    public static final long HABIT_DRAFT_TTL_MINUTES = 30;
+
+    /** 习惯补齐扫描间隔（毫秒） */
+    public static final long HABIT_SCHEDULE_SCAN_INTERVAL_MS = 60000;
+
+    /** 每日最多提醒时刻 */
+    public static final int HABIT_MAX_DAILY_TIMES = 10;
+
+    /** 最近习惯返回数量 */
+    public static final int HABIT_RECENT_MAX_COUNT = 5;
 
     /** 提醒目标类型 */
     public static final String DRAFT_TARGET_NEW = "NEW";

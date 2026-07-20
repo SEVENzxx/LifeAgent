@@ -13,7 +13,6 @@ lifeagent_ai/prompts/__init__.py
 lifeagent_ai/prompts/turn_resolver.py
 lifeagent_ai/providers/__init__.py
 lifeagent_ai/providers/base.py
-lifeagent_ai/providers/mock.py
 lifeagent_ai/providers/openai_compat.py
 lifeagent_ai/schemas/__init__.py
 lifeagent_ai/schemas/common.py

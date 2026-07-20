@@ -46,4 +46,15 @@ public class ContextPackage {
 
     /** 最多一个最近明确 Reminder，可空 */
     RecentReminderInfo recentReminder;
+
+    // ========== LA-007 习惯上下文 ==========
+
+    /** 最多一个未过期 Redis 习惯候选，可空 */
+    PendingHabitInfo pendingHabit;
+
+    /** 最多 5 个最近 ACTIVE/PAUSED 习惯，可空 */
+    List<RecentHabitInfo> recentHabits;
+
+    /** 最近一次已发送但尚未完成的执行，可空 */
+    RecentExecutionInfo recentHabitExecution;
 }

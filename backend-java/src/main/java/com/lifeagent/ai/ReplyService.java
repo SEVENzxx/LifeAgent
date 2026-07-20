@@ -1,10 +1,16 @@
 package com.lifeagent.ai;
 
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.lifeagent.cache.HabitDraftCache;
 import com.lifeagent.cache.ReminderDraftCache;
+import com.lifeagent.cache.model.HabitDraftCacheValue;
 import com.lifeagent.cache.model.ReminderDraftCacheValue;
 import com.lifeagent.config.AiProperties;
 import com.lifeagent.dto.turn.*;
 import com.lifeagent.entity.ConversationMessageEntity;
+import com.lifeagent.entity.HabitEntity;
+import com.lifeagent.entity.HabitExecutionEntity;
 import com.lifeagent.entity.ReminderEntity;
 import com.lifeagent.enums.DeliveryStatus;
 import com.lifeagent.enums.MessageRole;
@@ -12,6 +18,7 @@ import com.lifeagent.mapper.ChannelBindingMapper;
 import com.lifeagent.mapper.ConversationContextMapper;
 import com.lifeagent.mapper.ConversationMessageMapper;
 import com.lifeagent.service.ContextService;
+import com.lifeagent.service.HabitService;
 import com.lifeagent.service.ReminderService;
 import com.lifeagent.wecom.WeComApiClient;
 import lombok.RequiredArgsConstructor;
@@ -45,6 +52,9 @@ public class ReplyService {
     private final Clock clock;
     private final ReminderService reminderService;
     private final ReminderDraftCache reminderDraftCache;
+    private final HabitService habitService;
+    private final HabitDraftCache habitDraftCache;
+    private final ObjectMapper objectMapper;
 
     /**
      * 异步处理 AI 回复：读取上下文 -> 调用 AI -> 最终回复 -> 保存 -> 发送 -> 更新状态。
@@ -157,10 +167,21 @@ public class ReplyService {
                     .status(recentReminder.getStatus())
                     .content(recentReminder.getContent())
                     .eventAt(recentReminder.getEventAt())
-                    .remindAt(null) // 从 Job 查询最近提醒时间
+                    .remindAt(null)
                     .lastSentAt(null)
                     .build();
         }
+
+        // ========== LA-007 习惯上下文 ==========
+
+        // 查询习惯 Redis 候选
+        PendingHabitInfo pendingHabit = getPendingHabitInfo(userId);
+
+        // 查询最近习惯
+        List<RecentHabitInfo> recentHabits = getRecentHabitInfo(userId);
+
+        // 查询最近执行
+        RecentExecutionInfo recentExecution = getRecentExecutionInfo(userId);
 
         return ContextPackage.builder()
                 .currentMessage(base.getCurrentMessage())
@@ -172,6 +193,9 @@ public class ReplyService {
                 .timezone("Asia/Shanghai")
                 .pendingReminder(pendingInfo)
                 .recentReminder(recentInfo)
+                .pendingHabit(pendingHabit)
+                .recentHabits(recentHabits)
+                .recentHabitExecution(recentExecution)
                 .build();
     }
 
@@ -187,6 +211,7 @@ public class ReplyService {
         String intent = response.getIntent();
         String draft = response.getReplyDraft();
         ReminderResolution reminderResolution = response.getReminderResolution();
+        HabitResolution habitResolution = response.getHabitResolution();
 
         // AI 不可用
         if (STATUS_AI_UNAVAILABLE.equals(status)) {
@@ -241,9 +266,51 @@ public class ReplyService {
             return REPLY_FEATURE_IN_DEVELOPMENT;
         }
 
-        // 其他业务意图覆盖（不得使用 AI 草稿）
-        if (INTENT_HABIT_CREATE.equals(intent)
-                || INTENT_PLAN_CREATE.equals(intent)
+        // HABIT_CREATE 意图：执行习惯操作
+        if (INTENT_HABIT_CREATE.equals(intent) && habitResolution != null) {
+            String action = habitResolution.getAction();
+            double confidence = response.getConfidence();
+
+            if (confidence < aiProperties.getHabitWriteMinConfidence()) {
+                if (draft != null && !draft.isBlank()) {
+                    return draft;
+                }
+                return REPLY_AI_FALLBACK;
+            }
+
+            // UPSERT_DRAFT：保存或更新 Redis 候选
+            if (HABIT_ACTION_UPSERT_DRAFT.equals(action)) {
+                return handleHabitUpsertDraft(userId, idempotencyKey, habitResolution, draft);
+            }
+
+            // CONFIRM_DRAFT：确认候选
+            if (HABIT_ACTION_CONFIRM_DRAFT.equals(action)) {
+                return handleHabitConfirmDraft(userId, sourceMessageId, idempotencyKey, habitResolution, draft);
+            }
+
+            // ACK/COMPLETE/PAUSE/RESUME/CANCEL：执行写操作
+            String habitReply = habitService.executeHabitAction(
+                    userId, sourceMessageId, idempotencyKey, habitResolution, clock);
+            if (habitReply != null) {
+                return habitReply;
+            }
+
+            if (draft != null && !draft.isBlank()) {
+                return draft;
+            }
+            return REPLY_AI_FALLBACK;
+        }
+
+        // HABIT_CREATE 意图但没有 habit_resolution：仍按功能开发中提示
+        if (INTENT_HABIT_CREATE.equals(intent)) {
+            if (draft != null && !draft.isBlank()) {
+                return draft;
+            }
+            return REPLY_FEATURE_IN_DEVELOPMENT;
+        }
+
+        // PLAN_CREATE / ANALYSIS_REQUEST：功能开发中
+        if (INTENT_PLAN_CREATE.equals(intent)
                 || INTENT_ANALYSIS_REQUEST.equals(intent)) {
             return REPLY_FEATURE_IN_DEVELOPMENT;
         }
@@ -360,6 +427,98 @@ public class ReplyService {
             return draft;
         }
         return REPLY_AI_FALLBACK;
+    }
+
+    // ==================== 习惯上下文构建 ====================
+
+    private PendingHabitInfo getPendingHabitInfo(Long userId) {
+        HabitDraftCacheValue draft = habitDraftCache.get(userId);
+        if (draft == null) {
+            return null;
+        }
+        return PendingHabitInfo.builder()
+                .draftToken(draft.getDraftToken())
+                .name(draft.getName())
+                .dailyTimes(draft.getDailyTimes())
+                .startDate(draft.getStartDate())
+                .endDate(draft.getEndDate())
+                .timezone(draft.getTimezone())
+                .draftStatus(draft.getDraftStatus())
+                .build();
+    }
+
+    private List<RecentHabitInfo> getRecentHabitInfo(Long userId) {
+        List<HabitEntity> habits = habitService.findRecentHabits(userId);
+        return habits.stream()
+                .map(h -> RecentHabitInfo.builder()
+                        .habitId(h.getId())
+                        .version(h.getVersion())
+                        .name(h.getName())
+                        .dailyTimes(parseDailyTimes(h.getDailyTimes()))
+                        .status(h.getStatus())
+                        .build())
+                .toList();
+    }
+
+    private RecentExecutionInfo getRecentExecutionInfo(Long userId) {
+        HabitExecutionEntity exec = habitService.findRecentExecution(userId);
+        if (exec == null) {
+            return null;
+        }
+        return RecentExecutionInfo.builder()
+                .executionId(exec.getId())
+                .habitId(exec.getHabitId())
+                .occurrenceKey(exec.getOccurrenceKey())
+                .status(exec.getStatus())
+                .build();
+    }
+
+    private List<String> parseDailyTimes(String dailyTimesJson) {
+        if (dailyTimesJson == null || dailyTimesJson.isBlank()) {
+            return List.of();
+        }
+        try {
+            return objectMapper.readValue(dailyTimesJson,
+                    new com.fasterxml.jackson.core.type.TypeReference<List<String>>() {});
+        } catch (Exception e) {
+            return List.of();
+        }
+    }
+
+    // ==================== 习惯候选操作 ====================
+
+    private String handleHabitUpsertDraft(Long userId, String idempotencyKey,
+                                           HabitResolution resolution, String replyDraft) {
+        String reply = habitService.executeHabitAction(
+                userId, 0L, idempotencyKey, resolution, clock);
+        if (reply != null) {
+            return reply;
+        }
+
+        if (replyDraft != null && !replyDraft.isBlank()) {
+            return replyDraft;
+        }
+        return "已记下你的习惯信息，请在 30 分钟内确认。";
+    }
+
+    private String handleHabitConfirmDraft(Long userId, Long sourceMessageId,
+                                            String idempotencyKey,
+                                            HabitResolution resolution, String replyDraft) {
+        HabitDraftCacheValue draft = habitDraftCache.get(userId);
+        if (draft == null) {
+            return "待确认的习惯已过期，请重新说明。";
+        }
+
+        String reply = habitService.executeHabitAction(
+                userId, sourceMessageId, idempotencyKey, resolution, clock);
+        if (reply != null) {
+            return reply;
+        }
+
+        if (replyDraft != null && !replyDraft.isBlank()) {
+            return replyDraft;
+        }
+        return "确认失败，请重试。";
     }
 
     // ==================== 私有方法（原 ReplyService） ====================
