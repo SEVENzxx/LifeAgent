@@ -57,8 +57,8 @@ public class BehaviorEventServiceImpl implements BehaviorEventService {
                                                DeviceBindingEntity binding) {
         Instant now = Instant.now(clock);
 
-        // 1. 使用 SELECT FOR UPDATE 锁定设备行
-        DeviceBindingEntity locked = deviceBindingMapper.selectByDeviceId(binding.getDeviceId());
+        // 1. 使用 SELECT FOR UPDATE 锁定设备行，串行处理同设备事件
+        DeviceBindingEntity locked = deviceBindingMapper.selectByDeviceIdForUpdate(binding.getDeviceId());
         if (locked == null || !Constants.DEVICE_STATUS_ACTIVE.equals(locked.getStatus())) {
             throw new ForbiddenException("设备状态异常");
         }

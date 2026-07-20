@@ -15,6 +15,11 @@ public interface DeviceBindingMapper extends BaseMapper<DeviceBindingEntity> {
     DeviceBindingEntity selectByDeviceId(@Param("deviceId") String deviceId);
 
     /**
+     * 按 device_id 查询并锁定设备行（用于事务内串行处理）。
+     */
+    DeviceBindingEntity selectByDeviceIdForUpdate(@Param("deviceId") String deviceId);
+
+    /**
      * 更新凭证哈希（Token 轮换）。
      */
     int updateCredentialHash(@Param("id") Long id,

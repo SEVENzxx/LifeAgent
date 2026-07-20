@@ -74,16 +74,11 @@ public class ActivityWindowServiceImpl implements ActivityWindowService {
         Map<Long, MonitoredAppEntity> appMap = allApps.stream()
                 .collect(Collectors.toMap(MonitoredAppEntity::getId, a -> a));
 
+        int overfetchLimit = properties.getQueryMaxIntervals() + 1;
         List<ActivityIntervalEntity> intervals = activityIntervalMapper.selectByWindow(
-                deviceBindingId, from, to, appKey,
-                includeIntervals ? properties.getQueryMaxIntervals() + 1 : properties.getQueryMaxIntervals() + 1);
+                deviceBindingId, from, to, appKey, overfetchLimit);
 
-        boolean limitExceeded = intervals.size() > properties.getQueryMaxIntervals();
-        if (limitExceeded) {
-            throw new UnprocessableEntityException("区间数量超过返回上限，请缩小查询范围");
-        }
-
-        if (includeIntervals && intervals.size() > properties.getQueryMaxIntervals()) {
+        if (intervals.size() > properties.getQueryMaxIntervals()) {
             throw new UnprocessableEntityException("区间数量超过返回上限，请缩小查询范围");
         }
 
@@ -109,6 +104,7 @@ public class ActivityWindowServiceImpl implements ActivityWindowService {
                 case "TRUNCATED" -> truncatedCount++;
             }
         }
+
 
         List<BehaviorEventEntity> windowEvents = behaviorEventMapper
                 .selectByDeviceAndTimeRange(deviceBindingId, from, to);
@@ -137,7 +133,7 @@ public class ActivityWindowServiceImpl implements ActivityWindowService {
 
         CurrentActivity currentActivity = null;
         for (ClippedInterval ci : clipped) {
-            if (ci.quality.equals("OPEN") || ci.endAt == null) {
+            if (Constants.INTERVAL_QUALITY_OPEN.equals(ci.quality) || ci.endAt == null) {
                 MonitoredAppEntity app = appMap.get(ci.monitoredAppId);
                 long estimatedSecs = Math.min(
                         ci.clippedDuration,
@@ -274,6 +270,7 @@ public class ActivityWindowServiceImpl implements ActivityWindowService {
                     else openCountQuality++;
                 }
             }
+
             openCount++;
             if (lastActivityAt == null || ci.endAt.isAfter(lastActivityAt)) {
                 lastActivityAt = ci.endAt;
@@ -357,8 +354,8 @@ public class ActivityWindowServiceImpl implements ActivityWindowService {
         int count = 0;
         boolean hasOpen = false;
         for (BehaviorEventEntity e : events) {
-            if ("OPEN".equals(e.getEventType())) hasOpen = true;
-            else if ("CLOSE".equals(e.getEventType()) && !hasOpen) count++;
+            if (Constants.EVENT_TYPE_OPEN.equals(e.getEventType())) hasOpen = true;
+            else if (Constants.EVENT_TYPE_CLOSE.equals(e.getEventType()) && !hasOpen) count++;
         }
         return count;
     }
@@ -367,10 +364,10 @@ public class ActivityWindowServiceImpl implements ActivityWindowService {
         int count = 0;
         boolean sawOpen = false;
         for (BehaviorEventEntity e : events) {
-            if ("OPEN".equals(e.getEventType())) {
+            if (Constants.EVENT_TYPE_OPEN.equals(e.getEventType())) {
                 if (sawOpen) count++;
                 sawOpen = true;
-            } else if ("CLOSE".equals(e.getEventType())) {
+            } else if (Constants.EVENT_TYPE_CLOSE.equals(e.getEventType())) {
                 sawOpen = false;
             }
         }
@@ -381,9 +378,9 @@ public class ActivityWindowServiceImpl implements ActivityWindowService {
         int count = 0;
         boolean expectClose = false;
         for (BehaviorEventEntity e : events) {
-            if ("OPEN".equals(e.getEventType())) {
+            if (Constants.EVENT_TYPE_OPEN.equals(e.getEventType())) {
                 expectClose = true;
-            } else if ("CLOSE".equals(e.getEventType())) {
+            } else if (Constants.EVENT_TYPE_CLOSE.equals(e.getEventType())) {
                 if (!expectClose) count++;
             }
         }

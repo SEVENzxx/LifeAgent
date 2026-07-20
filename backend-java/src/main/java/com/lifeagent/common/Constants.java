@@ -198,11 +198,13 @@ public final class Constants {
     /** 区间质量 */
     public static final String INTERVAL_QUALITY_EXACT = "EXACT";
     public static final String INTERVAL_QUALITY_INFERRED_SWITCH = "INFERRED_SWITCH";
+    public static final String INTERVAL_QUALITY_TRUNCATED = "TRUNCATED";
     public static final String INTERVAL_QUALITY_OPEN = "OPEN";
 
     /** 区间结束原因 */
     public static final String END_REASON_EXPLICIT_CLOSE = "EXPLICIT_CLOSE";
     public static final String END_REASON_APP_SWITCH = "APP_SWITCH";
+    public static final String END_REASON_MAX_DURATION = "MAX_DURATION";
     public static final String END_REASON_STILL_OPEN = "STILL_OPEN";
 
     /** 设备状态 */

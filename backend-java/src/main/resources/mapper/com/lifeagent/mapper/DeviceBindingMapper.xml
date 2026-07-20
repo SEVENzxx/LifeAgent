@@ -11,6 +11,14 @@
         LIMIT 1
     </select>
 
+    <select id="selectByDeviceIdForUpdate" resultType="com.lifeagent.entity.DeviceBindingEntity">
+        SELECT *
+        FROM device_bindings
+        WHERE device_id = #{deviceId}
+        LIMIT 1
+        FOR UPDATE
+    </select>
+
     <update id="updateCredentialHash">
         UPDATE device_bindings
         SET credential_hash = #{credentialHash},
